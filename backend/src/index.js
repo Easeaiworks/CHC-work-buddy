@@ -1,0 +1,160 @@
+// BodyShop AI — Backend API Server
+// Node.js + Express | Railway deployment
+
+import express from 'express';
+import cors from 'cors';
+import helmet from 'helmet';
+import compression from 'compression';
+import rateLimit from 'express-rate-limit';
+import { createClient } from '@supabase/supabase-js';
+import Anthropic from '@anthropic-ai/sdk';
+import OpenAI from 'openai';
+import multer from 'multer';
+import dotenv from 'dotenv';
+import { agentRouter } from './routes/agent.js';
+import { documentsRouter } from './routes/documents.js';
+import { mediaRouter } from './routes/media.js';
+import { searchRouter } from './routes/search.js';
+import { ingestRouter } from './routes/ingest.js';
+import { authRouter } from './routes/auth.js';
+import { usersRouter } from './routes/users.js';
+import { authMiddleware } from './middleware/auth.js';
+import { auditMiddleware } from './middleware/audit.js';
+import { logger } from './utils/logger.js';
+
+dotenv.config();
+
+const app = express();
+const PORT = process.env.PORT || 3001;
+
+// ─── Supabase & AI Clients ───────────────────────────────────
+export const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_KEY  // Service key for backend (bypasses RLS where needed)
+);
+
+export const anthropic = new Anthropic({
+  apiKey: process.env.ANTHROPIC_API_KEY,
+});
+
+export const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
+
+// ─── Security Middleware ──────────────────────────────────────
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      imgSrc: ["'self'", "data:", "blob:", "*.supabase.co"],
+      mediaSrc: ["'self'", "blob:", "*.supabase.co"],
+      connectSrc: ["'self'", "*.supabase.co", "*.anthropic.com"],
+    },
+  },
+  crossOriginEmbedderPolicy: false,
+}));
+
+// CORS — whitelist only
+const allowedOrigins = (process.env.ALLOWED_ORIGINS || '').split(',').filter(Boolean);
+app.use(cors({
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin) || process.env.NODE_ENV === 'development') {
+      callback(null, true);
+    } else {
+      callback(new Error(`Origin ${origin} not allowed by CORS`));
+    }
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-ID'],
+}));
+
+app.use(compression());
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+// ─── Rate Limiting ────────────────────────────────────────────
+
+// General API rate limit
+const apiLimiter = rateLimit({
+  windowMs: 60 * 1000,       // 1 minute
+  max: 100,                   // 100 requests/min per IP
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests, please try again shortly.' },
+});
+
+// Stricter limit for AI agent (expensive)
+const agentLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,                    // 30 AI requests/min per IP
+  message: { error: 'AI request limit reached. Please wait a moment.' },
+});
+
+// Upload limiter
+const uploadLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,  // 1 hour
+  max: 50,                    // 50 uploads/hour
+  message: { error: 'Upload limit reached.' },
+});
+
+app.use('/api', apiLimiter);
+app.use('/api/agent', agentLimiter);
+app.use('/api/ingest', uploadLimiter);
+
+// ─── Request Logging & Audit ──────────────────────────────────
+app.use((req, res, next) => {
+  logger.info(`${req.method} ${req.path}`, {
+    ip: req.ip,
+    userAgent: req.get('user-agent'),
+  });
+  next();
+});
+
+// ─── Health Check (no auth) ───────────────────────────────────
+app.get('/health', (req, res) => {
+  res.json({
+    status: 'healthy',
+    timestamp: new Date().toISOString(),
+    version: process.env.npm_package_version || '1.0.0',
+  });
+});
+
+// ─── Public Routes ─────────────────────────────────────────────
+app.use('/api/auth', authRouter);
+
+// ─── Protected Routes (JWT required) ──────────────────────────
+app.use('/api/agent', authMiddleware, auditMiddleware, agentRouter);
+app.use('/api/documents', authMiddleware, documentsRouter);
+app.use('/api/media', authMiddleware, mediaRouter);
+app.use('/api/search', authMiddleware, searchRouter);
+app.use('/api/ingest', authMiddleware, ingestRouter);
+app.use('/api/auth/users', authMiddleware, usersRouter);
+
+// ─── 404 Handler ──────────────────────────────────────────────
+app.use((req, res) => {
+  res.status(404).json({ error: 'Endpoint not found' });
+});
+
+// ─── Global Error Handler ──────────────────────────────────────
+app.use((err, req, res, next) => {
+  logger.error('Unhandled error', { error: err.message, stack: err.stack });
+  
+  if (err.message.includes('not allowed by CORS')) {
+    return res.status(403).json({ error: 'CORS policy violation' });
+  }
+
+  res.status(err.status || 500).json({
+    error: process.env.NODE_ENV === 'production' ? 'Internal server error' : err.message,
+  });
+});
+
+// ─── Start Server ──────────────────────────────────────────────
+app.listen(PORT, () => {
+  logger.info(`BodyShop AI API running on port ${PORT}`);
+  logger.info(`Environment: ${process.env.NODE_ENV}`);
+});
+
+export default app;

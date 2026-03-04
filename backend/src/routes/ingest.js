@@ -1,0 +1,198 @@
+// routes/ingest.js — Document upload, extraction, and embedding
+
+import { Router } from 'express';
+import multer from 'multer';
+import pdfParse from 'pdf-parse';
+import mammoth from 'mammoth';
+import { supabase } from '../index.js';
+import { ingestDocument } from '../services/rag.js';
+import { requireRole } from '../middleware/auth.js';
+import { logger } from '../utils/logger.js';
+
+export const ingestRouter = Router();
+
+// Only admins and managers can upload documents
+ingestRouter.use(requireRole(['admin', 'manager']));
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 50 * 1024 * 1024 }, // 50MB max
+  fileFilter: (req, file, cb) => {
+    const allowed = [
+      'application/pdf',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'text/plain',
+      'text/csv',
+    ];
+    if (allowed.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error(`File type ${file.mimetype} not supported`));
+    }
+  },
+});
+
+// POST /api/ingest/document — Upload and embed a document
+ingestRouter.post('/document', upload.single('file'), async (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ error: 'No file provided' });
+  }
+
+  const { title, description, docType, tabSlug, language, tags } = req.body;
+  const userId = req.user.id;
+
+  if (!title || !docType) {
+    return res.status(400).json({ error: 'title and docType are required' });
+  }
+
+  try {
+    // 1. Extract text from file
+    let rawText = '';
+    const { buffer, mimetype, originalname, size } = req.file;
+
+    if (mimetype === 'application/pdf') {
+      const pdfData = await pdfParse(buffer);
+      rawText = pdfData.text;
+    } else if (mimetype.includes('wordprocessingml')) {
+      const result = await mammoth.extractRawText({ buffer });
+      rawText = result.value;
+    } else {
+      rawText = buffer.toString('utf-8');
+    }
+
+    if (!rawText.trim()) {
+      return res.status(400).json({ error: 'Could not extract text from file' });
+    }
+
+    // 2. Upload file to Supabase Storage
+    const filePath = `documents/${tabSlug || 'general'}/${Date.now()}-${originalname}`;
+    const { data: storageData, error: storageError } = await supabase.storage
+      .from('bodyshop-docs')
+      .upload(filePath, buffer, { contentType: mimetype });
+
+    if (storageError) throw storageError;
+
+    const { data: { publicUrl } } = supabase.storage
+      .from('bodyshop-docs')
+      .getPublicUrl(filePath);
+
+    // 3. Create document record
+    const { data: docRecord, error: docError } = await supabase
+      .from('documents')
+      .insert({
+        title,
+        description,
+        doc_type: docType,
+        tab_slug: tabSlug || null,
+        language: language || 'en',
+        file_url: publicUrl,
+        file_name: originalname,
+        file_size_bytes: size,
+        mime_type: mimetype,
+        tags: tags ? tags.split(',').map(t => t.trim()) : [],
+        uploaded_by: userId,
+      })
+      .select()
+      .single();
+
+    if (docError) throw docError;
+
+    // 4. Start embedding pipeline (async - return immediately)
+    res.json({
+      success: true,
+      document: docRecord,
+      message: 'Document uploaded. Embedding in progress...',
+    });
+
+    // 5. Run embedding asynchronously
+    ingestDocument(docRecord.id, rawText)
+      .then(result => {
+        logger.info('Embedding complete', { documentId: docRecord.id, chunks: result.chunkCount });
+      })
+      .catch(err => {
+        logger.error('Embedding failed', { documentId: docRecord.id, error: err.message });
+        // Mark document as embedding_failed
+        supabase.from('documents')
+          .update({ metadata: { embedding_status: 'failed', error: err.message } })
+          .eq('id', docRecord.id);
+      });
+
+  } catch (error) {
+    logger.error('Document ingest error', { error: error.message });
+    res.status(500).json({ error: 'Failed to process document', details: error.message });
+  }
+});
+
+// POST /api/ingest/media — Upload video or slideshow
+ingestRouter.post('/media', upload.single('file'), async (req, res) => {
+  const { title, description, mediaType, tabSlug, language } = req.body;
+  const userId = req.user.id;
+
+  if (!req.file && !req.body.fileUrl) {
+    return res.status(400).json({ error: 'No file or URL provided' });
+  }
+
+  try {
+    let fileUrl = req.body.fileUrl;
+    let thumbnailUrl = req.body.thumbnailUrl;
+
+    if (req.file) {
+      const { buffer, originalname, mimetype } = req.file;
+      const filePath = `media/${tabSlug || 'general'}/${Date.now()}-${originalname}`;
+      
+      const { error: storageError } = await supabase.storage
+        .from('bodyshop-media')
+        .upload(filePath, buffer, { contentType: mimetype });
+
+      if (storageError) throw storageError;
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('bodyshop-media')
+        .getPublicUrl(filePath);
+
+      fileUrl = publicUrl;
+    }
+
+    const { data, error } = await supabase
+      .from('media_items')
+      .insert({
+        title,
+        description,
+        media_type: mediaType,
+        tab_slug: tabSlug || null,
+        language: language || 'en',
+        file_url: fileUrl,
+        thumbnail_url: thumbnailUrl || null,
+        tags:       req.body.tags       ? req.body.tags.split(',').map(t => t.trim().toLowerCase()).filter(Boolean)       : [],
+        keywords:   req.body.keywords   ? req.body.keywords.split(',').map(k => k.trim().toLowerCase()).filter(Boolean)   : [],
+        transcript: req.body.transcript || null,
+        uploaded_by: userId,
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+    res.json({ success: true, media: data });
+
+  } catch (error) {
+    logger.error('Media ingest error', { error: error.message });
+    res.status(500).json({ error: 'Failed to upload media' });
+  }
+});
+
+// DELETE /api/ingest/document/:id
+ingestRouter.delete('/document/:id', async (req, res) => {
+  const { id } = req.params;
+  try {
+    // Chunks cascade delete via FK
+    const { error } = await supabase
+      .from('documents')
+      .update({ is_active: false })
+      .eq('id', id);
+
+    if (error) throw error;
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to delete document' });
+  }
+});
