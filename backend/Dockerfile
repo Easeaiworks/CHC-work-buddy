@@ -3,8 +3,8 @@ FROM node:20-alpine
 WORKDIR /app
 
 # Install dependencies
-COPY backend/package*.json ./
-RUN npm ci --only=production
+COPY backend/package.json backend/package-lock.json ./
+RUN npm ci --omit=dev
 
 # Copy source
 COPY backend/src/ ./src/
