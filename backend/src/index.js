@@ -57,17 +57,28 @@ app.use(helmet({
 }));
 
 // CORS — whitelist only
-const allowedOrigins = (process.env.ALLOWED_ORIGINS || '').split(',').filter(Boolean);
+const allowedOrigins = (process.env.ALLOWED_ORIGINS || '')
+  .split(',')
+  .map(o => o.trim().replace(/\/+$/, ''))  // trim whitespace and trailing slashes
+  .filter(Boolean);
+
+logger.info('CORS allowed origins:', { allowedOrigins });
+
 app.use(cors({
   origin: (origin, callback) => {
-    if (!origin || allowedOrigins.includes(origin) || process.env.NODE_ENV === 'development') {
+    // Allow requests with no origin (mobile apps, curl, health checks)
+    if (!origin) return callback(null, true);
+    // Normalize origin for comparison
+    const normalizedOrigin = origin.replace(/\/+$/, '');
+    if (allowedOrigins.includes(normalizedOrigin) || process.env.NODE_ENV === 'development') {
       callback(null, true);
     } else {
+      logger.warn(`CORS blocked origin: ${origin}`, { allowedOrigins });
       callback(new Error(`Origin ${origin} not allowed by CORS`));
     }
   },
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-ID'],
 }));
 
@@ -119,6 +130,8 @@ app.get('/health', (req, res) => {
     status: 'healthy',
     timestamp: new Date().toISOString(),
     version: process.env.npm_package_version || '1.0.0',
+    cors_origins: allowedOrigins,
+    port: PORT,
   });
 });
 
