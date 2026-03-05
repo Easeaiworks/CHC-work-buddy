@@ -635,6 +635,14 @@ export default function App() {
     localStorage.setItem("bsai_theme", theme);
   }, [theme]);
 
+  // Preload TTS voices (browsers load them async)
+  useEffect(() => {
+    if ("speechSynthesis" in window) {
+      window.speechSynthesis.getVoices();
+      window.speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices();
+    }
+  }, []);
+
   // Speech Recognition setup
   useEffect(() => {
     if (!("webkitSpeechRecognition" in window || "SpeechRecognition" in window)) return;
@@ -655,13 +663,30 @@ export default function App() {
     recognitionRef.current = recognition;
   }, [language]);
 
-  // TTS
+  // TTS — prefer a natural male voice for Max
   const speak = useCallback((text) => {
     if (!("speechSynthesis" in window)) return;
     window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(text.slice(0, 500));
-    utterance.lang = language === "fr" ? "fr-CA" : language === "es" ? "es-MX" : "en-CA";
+    utterance.lang = language === "fr" ? "fr-CA" : language === "es" ? "es-MX" : "en-US";
     utterance.rate = 0.95;
+    utterance.pitch = 0.9;
+
+    // Find a male voice — prefer natural/enhanced voices
+    const voices = window.speechSynthesis.getVoices();
+    const langPrefix = utterance.lang.slice(0, 2);
+    const maleKeywords = ["daniel", "james", "aaron", "david", "gordon", "male", "guy", "tom", "alex", "fred", "rishi", "jorge", "thomas", "reed", "evan"];
+    const naturalKeywords = ["premium", "enhanced", "natural", "neural"];
+
+    // Priority 1: Natural/premium male voice
+    let voice = voices.find(v => v.lang.startsWith(langPrefix) && maleKeywords.some(k => v.name.toLowerCase().includes(k)) && naturalKeywords.some(k => v.name.toLowerCase().includes(k)));
+    // Priority 2: Any male voice in the right language
+    if (!voice) voice = voices.find(v => v.lang.startsWith(langPrefix) && maleKeywords.some(k => v.name.toLowerCase().includes(k)));
+    // Priority 3: Any voice with "male" in name
+    if (!voice) voice = voices.find(v => maleKeywords.some(k => v.name.toLowerCase().includes(k)));
+
+    if (voice) utterance.voice = voice;
+
     utterance.onstart = () => setIsSpeaking(true);
     utterance.onend = () => setIsSpeaking(false);
     utterance.onerror = () => setIsSpeaking(false);
