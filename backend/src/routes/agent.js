@@ -59,9 +59,15 @@ agentRouter.post('/query', async (req, res) => {
       tabFilter: tabSlug, matchCount: 6, threshold: 0.60,
     }) : [];
 
-    const { data: keywordResults } = await supabase.rpc('search_documents', {
-      search_query: message, tab_filter: tabSlug || null, result_limit: 4,
-    });
+    let keywordResults = [];
+    try {
+      const { data } = await supabase.rpc('search_documents', {
+        search_query: message, tab_filter: tabSlug || null, result_limit: 4,
+      });
+      keywordResults = data || [];
+    } catch (e) {
+      logger.warn('Keyword search failed (non-fatal)', { error: e.message });
+    }
 
     let conversationHistory = [];
     if (sessionId) {
