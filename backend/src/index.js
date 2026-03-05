@@ -153,6 +153,48 @@ app.get('/health', (req, res) => {
 // ─── Public Routes ─────────────────────────────────────────────
 app.use('/api/auth', authRouter);
 
+// ─── Maintenance: one-time embedding backfill (no auth) ──────
+app.post('/api/maintenance/generate-embeddings', async (req, res) => {
+  try {
+    const { generateEmbedding } = await import('./services/rag.js');
+    const { data: chunks, error: fetchErr } = await supabase
+      .from('document_chunks')
+      .select('id, content')
+      .is('embedding', null)
+      .order('created_at', { ascending: true })
+      .limit(500);
+
+    if (fetchErr) throw fetchErr;
+    if (!chunks || chunks.length === 0) {
+      return res.json({ message: 'All chunks already have embeddings', processed: 0 });
+    }
+
+    logger.info(`Generating embeddings for ${chunks.length} chunks`);
+    let successCount = 0;
+    const BATCH = 10;
+
+    for (let i = 0; i < chunks.length; i += BATCH) {
+      const batch = chunks.slice(i, i + BATCH);
+      const results = await Promise.all(
+        batch.map(async (chunk) => {
+          try {
+            const embedding = await generateEmbedding(chunk.content);
+            if (!embedding) return false;
+            const { error } = await supabase.from('document_chunks').update({ embedding }).eq('id', chunk.id);
+            return !error;
+          } catch { return false; }
+        })
+      );
+      successCount += results.filter(Boolean).length;
+      if (i + BATCH < chunks.length) await new Promise(r => setTimeout(r, 300));
+    }
+
+    res.json({ message: 'Done', processed: successCount, total: chunks.length });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // ─── Protected Routes (JWT required) ──────────────────────────
 app.use('/api/agent', authMiddleware, auditMiddleware, agentRouter);
 app.use('/api/documents', authMiddleware, documentsRouter);
