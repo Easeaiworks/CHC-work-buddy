@@ -544,18 +544,42 @@ function ChatMessage({ message, isUser, onPlayVideo, onOpenDoc, theme = "dark" }
         whiteSpace: "pre-wrap",
         boxShadow: isUser ? "none" : `inset 1px 1px 0 ${colors.border}`,
       }}>
-        {/* Answer Source Badge */}
+        {/* Answer Source Badge — clickable */}
         {!isUser && message.answerSource && (
-          <div style={{
-            display: "inline-flex", alignItems: "center", gap: 5,
-            padding: "3px 10px", borderRadius: 20, marginBottom: 8,
-            fontSize: 10, fontWeight: 700, letterSpacing: 0.5, textTransform: "uppercase",
-            background: message.answerSource === "vector" ? "rgba(34,197,94,0.15)" : message.answerSource === "rag" ? "rgba(59,130,246,0.15)" : "rgba(249,115,22,0.15)",
-            color: message.answerSource === "vector" ? "#22c55e" : message.answerSource === "rag" ? "#3b82f6" : "#f97316",
-            border: `1px solid ${message.answerSource === "vector" ? "#22c55e33" : message.answerSource === "rag" ? "#3b82f633" : "#f9731633"}`,
-          }}>
+          <div
+            onClick={() => {
+              if ((message.answerSource === "vector" || message.answerSource === "rag") && message.sources?.length > 0) {
+                const s = message.sources[0];
+                onOpenDoc && onOpenDoc({ id: s.id, title: s.title, doc_type: s.docType, tab_slug: s.tabSlug, file_url: s.fileUrl });
+              } else if (message.answerSource === "llm") {
+                const el = document.getElementById("resources-footer-bar");
+                if (el) {
+                  el.scrollIntoView({ behavior: "smooth" });
+                  const expandBtn = el.querySelector("button");
+                  if (expandBtn) expandBtn.click();
+                } else { window.open("https://www.osha.gov/auto-body-repair", "_blank"); }
+              }
+            }}
+            title={
+              message.answerSource === "vector" ? "Click to view source document" :
+              message.answerSource === "rag" ? "Click to view matched document" :
+              "Click to view authoritative resources"
+            }
+            style={{
+              display: "inline-flex", alignItems: "center", gap: 5,
+              padding: "3px 10px", borderRadius: 20, marginBottom: 8,
+              fontSize: 10, fontWeight: 700, letterSpacing: 0.5, textTransform: "uppercase",
+              cursor: "pointer", transition: "all 0.2s ease",
+              background: message.answerSource === "vector" ? "rgba(34,197,94,0.15)" : message.answerSource === "rag" ? "rgba(59,130,246,0.15)" : "rgba(249,115,22,0.15)",
+              color: message.answerSource === "vector" ? "#22c55e" : message.answerSource === "rag" ? "#3b82f6" : "#f97316",
+              border: `1px solid ${message.answerSource === "vector" ? "#22c55e33" : message.answerSource === "rag" ? "#3b82f633" : "#f9731633"}`,
+            }}
+            onMouseEnter={e => { e.currentTarget.style.filter = "brightness(1.3)"; e.currentTarget.style.transform = "scale(1.05)"; }}
+            onMouseLeave={e => { e.currentTarget.style.filter = "brightness(1)"; e.currentTarget.style.transform = "scale(1)"; }}
+          >
             <span style={{ fontSize: 8 }}>{message.answerSource === "vector" ? "✅" : message.answerSource === "rag" ? "🔍" : "⚠️"}</span>
             {message.answerSource === "vector" ? "Verified Source" : message.answerSource === "rag" ? "Database Match" : "AI General Knowledge"}
+            <span style={{ fontSize: 10, opacity: 0.7 }}>→</span>
           </div>
         )}
         {message.media?.length > 0 && (
@@ -2604,7 +2628,7 @@ export default function App() {
       {mediaViewer && <MediaViewer item={mediaViewer} onClose={() => setMediaViewer(null)} theme={theme} />}
 
       {/* Resources & Attribution Footer Bar */}
-      <div style={{
+      <div id="resources-footer-bar" style={{
         position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 900,
         background: colors.surface, borderTop: `1px solid ${colors.border}`,
         transition: "all 0.3s ease",
