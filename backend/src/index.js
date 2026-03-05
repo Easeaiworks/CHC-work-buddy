@@ -154,7 +154,7 @@ app.get('/health', (req, res) => {
 app.use('/api/auth', authRouter);
 
 // ─── Maintenance: one-time embedding backfill (no auth) ──────
-app.post('/api/maintenance/generate-embeddings', async (req, res) => {
+app.all('/api/maintenance/generate-embeddings', async (req, res) => {
   try {
     const { generateEmbedding } = await import('./services/rag.js');
     const { data: chunks, error: fetchErr } = await supabase
