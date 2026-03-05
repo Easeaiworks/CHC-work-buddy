@@ -126,3 +126,43 @@ mediaRouter.get('/:id', async (req, res) => {
   if (error || !data) return res.status(404).json({ error: 'Not found' });
   res.json({ media: data });
 });
+
+// PATCH /api/media/:id — Update media metadata
+mediaRouter.patch('/:id', async (req, res) => {
+  const { title, description, media_type, tab_slug, language, tags, keywords, transcript, file_url } = req.body;
+  const updates = {};
+  if (title !== undefined) updates.title = title;
+  if (description !== undefined) updates.description = description;
+  if (media_type !== undefined) updates.media_type = media_type;
+  if (tab_slug !== undefined) updates.tab_slug = tab_slug || null;
+  if (language !== undefined) updates.language = language;
+  if (file_url !== undefined) updates.file_url = file_url;
+  if (tags !== undefined) updates.tags = Array.isArray(tags) ? tags : tags.split(',').map(t => t.trim().toLowerCase()).filter(Boolean);
+  if (keywords !== undefined) updates.keywords = Array.isArray(keywords) ? keywords : keywords.split(',').map(k => k.trim().toLowerCase()).filter(Boolean);
+  if (transcript !== undefined) updates.transcript = transcript;
+
+  if (Object.keys(updates).length === 0) {
+    return res.status(400).json({ error: 'No fields to update' });
+  }
+
+  const { data, error } = await supabase
+    .from('media_items')
+    .update(updates)
+    .eq('id', req.params.id)
+    .select()
+    .single();
+
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ media: data });
+});
+
+// DELETE /api/media/:id — Soft-delete a media item
+mediaRouter.delete('/:id', async (req, res) => {
+  const { error } = await supabase
+    .from('media_items')
+    .update({ is_active: false })
+    .eq('id', req.params.id);
+
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ success: true });
+});

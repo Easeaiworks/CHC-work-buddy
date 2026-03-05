@@ -51,6 +51,13 @@ const TabIcon = ({ type, size = 22, color = "currentColor" }) => {
         <path d="M8 11l2 2 4-4" strokeWidth="2.5"/>
       </svg>
     ),
+    learning: (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        {/* Open book */}
+        <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/>
+        <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>
+      </svg>
+    ),
   };
   return icons[type] || null;
 };
@@ -62,6 +69,7 @@ const TABS = [
   { slug: "painting",            label: { en: "Painting",            fr: "Peinture",             es: "Pintura" },                    iconType: "paintgun",  color: "#8b5cf6" },
   { slug: "reassembly",          label: { en: "Reassembly",          fr: "Réassemblage",         es: "Reensamblaje" },               iconType: "reassembly", color: "#3b82f6" },
   { slug: "detailing-qc",        label: { en: "Detailing & QC",      fr: "Finition & CQ",        es: "Detallado y CC" },             iconType: "detailing", color: "#22c55e" },
+  { slug: "learning",            label: { en: "Learning",            fr: "Apprentissage",        es: "Aprendizaje" },                iconType: "learning",  color: "#ec4899" },
 ];
 
 const API_BASE = import.meta.env.VITE_API_URL || "https://chc-work-buddy-production-5b0e.up.railway.app";
@@ -853,6 +861,20 @@ export default function App() {
   const [authError, setAuthError] = useState("");
   const [theme, setTheme] = useState(localStorage.getItem("bsai_theme") || "dark");
 
+  // Learning tab state
+  const [learningView, setLearningView] = useState("menu");
+  const [learningGuides, setLearningGuides] = useState([]);
+  const [learningQuizzes, setLearningQuizzes] = useState([]);
+  const [activeGuide, setActiveGuide] = useState(null);
+  const [guideHistory, setGuideHistory] = useState([]);
+  const [activeQuiz, setActiveQuiz] = useState(null);
+  const [quizQuestions, setQuizQuestions] = useState([]);
+  const [quizCurrentQ, setQuizCurrentQ] = useState(0);
+  const [quizAnswers, setQuizAnswers] = useState({});
+  const [quizResults, setQuizResults] = useState(null);
+  const [quizSubmitting, setQuizSubmitting] = useState(false);
+  const [learningLoading, setLearningLoading] = useState(false);
+
   const chatEndRef = useRef(null);
   const recognitionRef = useRef(null);
   const speechSynthRef = useRef(null);
@@ -961,6 +983,20 @@ export default function App() {
         console.error('[BSW] Documents fetch error:', err);
         setContentLoading(false);
       });
+  }, [activeTab, token]);
+
+  // Learning tab data fetching
+  useEffect(() => {
+    if (activeTab !== "learning" || !token) return;
+    setLearningLoading(true);
+    Promise.all([
+      fetch(`${API_BASE}/api/learning/guides`, { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json()),
+      fetch(`${API_BASE}/api/learning/quizzes`, { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json()),
+    ]).then(([g, q]) => {
+      setLearningGuides(g.guides || []);
+      setLearningQuizzes(q.quizzes || []);
+      setLearningLoading(false);
+    }).catch(() => setLearningLoading(false));
   }, [activeTab, token]);
 
   // Search
@@ -1093,6 +1129,66 @@ export default function App() {
     } catch {
       setAuthError("Connection error. Please try again.");
     }
+  };
+
+  // Learning tab handlers
+  const openGuide = async (slug) => {
+    try {
+      const res = await fetch(`${API_BASE}/api/learning/guides/${slug}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      setActiveGuide(data.guide);
+      setGuideHistory(["root"]);
+      setLearningView("guide");
+    } catch {
+      console.error("Failed to open guide:", slug);
+    }
+  };
+
+  const navigateGuide = (nodeId) => {
+    setGuideHistory(prev => [...prev, nodeId]);
+  };
+
+  const guideBack = () => {
+    setGuideHistory(prev => prev.slice(0, -1));
+  };
+
+  const openQuiz = async (slug) => {
+    try {
+      const res = await fetch(`${API_BASE}/api/learning/quizzes/${slug}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      setActiveQuiz(data.quiz);
+      setQuizQuestions(data.questions || []);
+      setQuizCurrentQ(0);
+      setQuizAnswers({});
+      setQuizResults(null);
+      setLearningView("quiz");
+    } catch {
+      console.error("Failed to open quiz:", slug);
+    }
+  };
+
+  const submitQuiz = async () => {
+    if (!activeQuiz) return;
+    setQuizSubmitting(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/learning/quizzes/${activeQuiz.id}/submit`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ answers: quizAnswers }),
+      });
+      const data = await res.json();
+      setQuizResults(data);
+    } catch {
+      console.error("Failed to submit quiz");
+    }
+    setQuizSubmitting(false);
   };
 
   const currentTab = TABS.find(t => t.slug === activeTab);
@@ -1583,13 +1679,735 @@ export default function App() {
                 {currentTab?.label[language]}
               </h2>
               <div style={{ color: colors.textSecondary, fontSize: 12, marginTop: 4, fontWeight: 500 }}>
-                {searchResults.length > 0 ? `${searchResults.length} search result${searchResults.length !== 1 ? 's' : ''}` : `${docs.length} resource${docs.length !== 1 ? 's' : ''}`}
+                {activeTab === "learning"
+                  ? learningView === "menu"
+                    ? `${learningGuides.length} guide${learningGuides.length !== 1 ? 's' : ''} · ${learningQuizzes.length} quiz${learningQuizzes.length !== 1 ? 'zes' : ''}`
+                    : learningView === "guide"
+                    ? `Guide: ${activeGuide?.title?.[language] || "Loading..."}`
+                    : `Quiz: ${activeQuiz?.title?.[language] || "Loading..."}`
+                  : searchResults.length > 0 ? `${searchResults.length} search result${searchResults.length !== 1 ? 's' : ''}` : `${docs.length} resource${docs.length !== 1 ? 's' : ''}`
+                }
               </div>
             </div>
           </div>
 
-          {/* Results grid */}
-          {contentLoading ? (
+          {/* Learning tab content */}
+          {activeTab === "learning" ? (
+            learningLoading ? (
+              <div style={{ color: colors.textSecondary, fontSize: 14, padding: 40, textAlign: "center", animation: "pulse 1.5s ease-in-out infinite" }}>
+                <div style={{ fontSize: 24, marginBottom: 12 }}>⏳</div>
+                Loading learning resources...
+              </div>
+            ) : learningView === "menu" ? (
+              // Learning menu view
+              <div style={{ display: "flex", flexDirection: "column", gap: 32 }}>
+                {/* Troubleshooting Guides Section */}
+                <div>
+                  <h3 style={{
+                    fontFamily: "'Barlow Condensed', sans-serif",
+                    fontWeight: 900, fontSize: 18, letterSpacing: 2,
+                    textTransform: "uppercase",
+                    color: colors.textPrimary,
+                    marginBottom: 16,
+                  }}>
+                    Troubleshooting Guides
+                  </h3>
+                  {learningGuides.length === 0 ? (
+                    <div style={{
+                      color: colors.textSecondary, fontSize: 14, padding: 30, textAlign: "center",
+                      border: `1px dashed ${colors.border}`, borderRadius: 12,
+                      background: colors.surfaceLight,
+                    }}>
+                      No guides available
+                    </div>
+                  ) : (
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: 16 }}>
+                      {learningGuides.map((guide, i) => (
+                        <div
+                          key={i}
+                          onClick={() => openGuide(guide.slug)}
+                          style={{
+                            background: colors.surface,
+                            border: `1px solid ${colors.border}`,
+                            borderRadius: 14,
+                            padding: 16,
+                            cursor: "pointer",
+                            transition: "all 0.3s ease",
+                            animation: `slideUp 0.4s ease ${i * 50}ms both`,
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.background = colors.surfaceLight;
+                            e.currentTarget.style.borderColor = colors.accentPrimary;
+                            e.currentTarget.style.boxShadow = `0 8px 24px rgba(6,182,212,0.1)`;
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.background = colors.surface;
+                            e.currentTarget.style.borderColor = colors.border;
+                            e.currentTarget.style.boxShadow = "none";
+                          }}
+                        >
+                          <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
+                            <div style={{ fontSize: 24 }}>📚</div>
+                            <div style={{ flex: 1 }}>
+                              <h4 style={{ color: colors.textPrimary, margin: 0, fontWeight: 600, fontSize: 15 }}>
+                                {guide.title?.[language] || guide.title}
+                              </h4>
+                              <p style={{ color: colors.textSecondary, fontSize: 13, margin: "8px 0 0 0", lineHeight: 1.4 }}>
+                                {guide.description?.[language] || guide.description}
+                              </p>
+                              {guide.category && (
+                                <div style={{
+                                  display: "inline-block",
+                                  marginTop: 10,
+                                  paddingX: 8,
+                                  paddingY: 4,
+                                  background: `${colors.accentPrimary}15`,
+                                  color: colors.accentPrimary,
+                                  fontSize: 11,
+                                  fontWeight: 600,
+                                  borderRadius: 6,
+                                  padding: "4px 8px",
+                                }}>
+                                  {guide.category}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Skill Assessments Section */}
+                <div>
+                  <h3 style={{
+                    fontFamily: "'Barlow Condensed', sans-serif",
+                    fontWeight: 900, fontSize: 18, letterSpacing: 2,
+                    textTransform: "uppercase",
+                    color: colors.textPrimary,
+                    marginBottom: 16,
+                  }}>
+                    Skill Assessments
+                  </h3>
+                  {learningQuizzes.length === 0 ? (
+                    <div style={{
+                      color: colors.textSecondary, fontSize: 14, padding: 30, textAlign: "center",
+                      border: `1px dashed ${colors.border}`, borderRadius: 12,
+                      background: colors.surfaceLight,
+                    }}>
+                      No quizzes available
+                    </div>
+                  ) : (
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: 16 }}>
+                      {learningQuizzes.map((quiz, i) => (
+                        <div
+                          key={i}
+                          onClick={() => openQuiz(quiz.slug)}
+                          style={{
+                            background: colors.surface,
+                            border: `1px solid ${colors.border}`,
+                            borderRadius: 14,
+                            padding: 16,
+                            cursor: "pointer",
+                            transition: "all 0.3s ease",
+                            animation: `slideUp 0.4s ease ${i * 50}ms both`,
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.background = colors.surfaceLight;
+                            e.currentTarget.style.borderColor = colors.accentPrimary;
+                            e.currentTarget.style.boxShadow = `0 8px 24px rgba(6,182,212,0.1)`;
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.background = colors.surface;
+                            e.currentTarget.style.borderColor = colors.border;
+                            e.currentTarget.style.boxShadow = "none";
+                          }}
+                        >
+                          <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
+                            <div style={{ fontSize: 24 }}>✓</div>
+                            <div style={{ flex: 1 }}>
+                              <h4 style={{ color: colors.textPrimary, margin: 0, fontWeight: 600, fontSize: 15 }}>
+                                {quiz.title?.[language] || quiz.title}
+                              </h4>
+                              <p style={{ color: colors.textSecondary, fontSize: 13, margin: "8px 0 0 0", lineHeight: 1.4 }}>
+                                {quiz.description?.[language] || quiz.description}
+                              </p>
+                              <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
+                                {quiz.passed ? (
+                                  <div style={{
+                                    paddingX: 8,
+                                    paddingY: 4,
+                                    background: "#22c55e",
+                                    color: "white",
+                                    fontSize: 11,
+                                    fontWeight: 600,
+                                    borderRadius: 6,
+                                    padding: "4px 8px",
+                                  }}>
+                                    ✓ Passed
+                                  </div>
+                                ) : quiz.bestScore !== undefined && quiz.bestScore !== null ? (
+                                  <div style={{
+                                    paddingX: 8,
+                                    paddingY: 4,
+                                    background: "#ef4444",
+                                    color: "white",
+                                    fontSize: 11,
+                                    fontWeight: 600,
+                                    borderRadius: 6,
+                                    padding: "4px 8px",
+                                  }}>
+                                    Not Passed
+                                  </div>
+                                ) : (
+                                  <div style={{
+                                    paddingX: 8,
+                                    paddingY: 4,
+                                    background: colors.borderLight,
+                                    color: colors.textSecondary,
+                                    fontSize: 11,
+                                    fontWeight: 600,
+                                    borderRadius: 6,
+                                    padding: "4px 8px",
+                                  }}>
+                                    Not Attempted
+                                  </div>
+                                )}
+                                {quiz.bestScore !== undefined && quiz.bestScore !== null && (
+                                  <div style={{
+                                    paddingX: 8,
+                                    paddingY: 4,
+                                    background: colors.borderLight,
+                                    color: colors.textSecondary,
+                                    fontSize: 11,
+                                    fontWeight: 600,
+                                    borderRadius: 6,
+                                    padding: "4px 8px",
+                                  }}>
+                                    Best: {quiz.bestScore}%
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : learningView === "guide" ? (
+              // Guide view
+              activeGuide ? (
+                <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingBottom: 16, borderBottom: `1px solid ${colors.border}` }}>
+                    <h3 style={{ color: colors.textPrimary, margin: 0, fontSize: 18, fontWeight: 600 }}>
+                      {activeGuide.title?.[language] || activeGuide.title}
+                    </h3>
+                    <button
+                      onClick={() => {
+                        setLearningView("menu");
+                        setActiveGuide(null);
+                        setGuideHistory([]);
+                      }}
+                      style={{
+                        padding: "8px 16px",
+                        background: colors.surfaceLight,
+                        border: `1px solid ${colors.border}`,
+                        borderRadius: 8,
+                        color: colors.textPrimary,
+                        fontSize: 12,
+                        fontWeight: 600,
+                        cursor: "pointer",
+                        transition: "all 0.2s",
+                      }}
+                      onMouseEnter={(e) => {
+                        e.target.style.background = colors.accentSecondary;
+                        e.target.style.color = "white";
+                      }}
+                      onMouseLeave={(e) => {
+                        e.target.style.background = colors.surfaceLight;
+                        e.target.style.color = colors.textPrimary;
+                      }}
+                    >
+                      ← Back to Menu
+                    </button>
+                  </div>
+
+                  {/* Guide node rendering */}
+                  {(() => {
+                    const currentNodeId = guideHistory[guideHistory.length - 1];
+                    const currentNode = activeGuide.node_tree?.find(n => n.id === currentNodeId);
+
+                    if (!currentNode) return <div>Node not found</div>;
+
+                    return (
+                      <div>
+                        {currentNode.type === "question" ? (
+                          <div style={{ padding: 20, background: colors.surfaceLight, borderRadius: 12, marginBottom: 16 }}>
+                            <p style={{ color: colors.textPrimary, fontSize: 16, fontWeight: 600, margin: 0, marginBottom: 16 }}>
+                              {currentNode.text?.[language] || currentNode.text}
+                            </p>
+                            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                              {currentNode.options?.map((opt, i) => (
+                                <button
+                                  key={i}
+                                  onClick={() => navigateGuide(opt.next)}
+                                  style={{
+                                    padding: "12px 16px",
+                                    background: colors.surface,
+                                    border: `1px solid ${colors.border}`,
+                                    borderRadius: 8,
+                                    color: colors.textPrimary,
+                                    fontSize: 14,
+                                    fontWeight: 500,
+                                    cursor: "pointer",
+                                    transition: "all 0.2s",
+                                    textAlign: "left",
+                                  }}
+                                  onMouseEnter={(e) => {
+                                    e.target.style.background = colors.accentPrimary;
+                                    e.target.style.borderColor = colors.accentPrimary;
+                                    e.target.style.color = "white";
+                                  }}
+                                  onMouseLeave={(e) => {
+                                    e.target.style.background = colors.surface;
+                                    e.target.style.borderColor = colors.border;
+                                    e.target.style.color = colors.textPrimary;
+                                  }}
+                                >
+                                  → {opt.label?.[language] || opt.label}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        ) : currentNode.type === "diagnosis" ? (
+                          <div style={{ padding: 20, background: colors.surfaceLight, borderRadius: 12, marginBottom: 16 }}>
+                            <h4 style={{ color: colors.accentSecondary, margin: "0 0 16px 0", fontSize: 14, fontWeight: 700, textTransform: "uppercase" }}>
+                              Diagnosis
+                            </h4>
+                            <p style={{ color: colors.textPrimary, fontSize: 15, fontWeight: 500, margin: "0 0 16px 0", lineHeight: 1.6 }}>
+                              {currentNode.text?.[language] || currentNode.text}
+                            </p>
+                            {currentNode.steps && currentNode.steps.length > 0 && (
+                              <div>
+                                <h5 style={{ color: colors.textPrimary, margin: "16px 0 12px 0", fontSize: 13, fontWeight: 600 }}>
+                                  Steps:
+                                </h5>
+                                <ol style={{ margin: 0, paddingLeft: 20, color: colors.textSecondary, fontSize: 14, lineHeight: 1.8 }}>
+                                  {currentNode.steps.map((step, i) => (
+                                    <li key={i} style={{ marginBottom: 8 }}>
+                                      {typeof step === "string" ? step : step[language] || step.en}
+                                    </li>
+                                  ))}
+                                </ol>
+                              </div>
+                            )}
+                          </div>
+                        ) : null}
+
+                        <div style={{ display: "flex", gap: 12, justifyContent: "space-between" }}>
+                          <button
+                            onClick={guideBack}
+                            disabled={guideHistory.length <= 1}
+                            style={{
+                              padding: "10px 16px",
+                              background: guideHistory.length <= 1 ? colors.borderLight : colors.surface,
+                              border: `1px solid ${colors.border}`,
+                              borderRadius: 8,
+                              color: guideHistory.length <= 1 ? colors.textSecondary : colors.textPrimary,
+                              fontSize: 13,
+                              fontWeight: 600,
+                              cursor: guideHistory.length <= 1 ? "not-allowed" : "pointer",
+                              opacity: guideHistory.length <= 1 ? 0.5 : 1,
+                              transition: "all 0.2s",
+                            }}
+                            onMouseEnter={(e) => {
+                              if (guideHistory.length > 1) {
+                                e.target.style.background = colors.accentSecondary;
+                                e.target.style.color = "white";
+                              }
+                            }}
+                            onMouseLeave={(e) => {
+                              if (guideHistory.length > 1) {
+                                e.target.style.background = colors.surface;
+                                e.target.style.color = colors.textPrimary;
+                              }
+                            }}
+                          >
+                            ← Previous
+                          </button>
+                          <button
+                            onClick={() => {
+                              setLearningView("menu");
+                              setActiveGuide(null);
+                              setGuideHistory([]);
+                            }}
+                            style={{
+                              padding: "10px 16px",
+                              background: colors.surface,
+                              border: `1px solid ${colors.border}`,
+                              borderRadius: 8,
+                              color: colors.textPrimary,
+                              fontSize: 13,
+                              fontWeight: 600,
+                              cursor: "pointer",
+                              transition: "all 0.2s",
+                            }}
+                            onMouseEnter={(e) => {
+                              e.target.style.background = colors.accentSecondary;
+                              e.target.style.color = "white";
+                            }}
+                            onMouseLeave={(e) => {
+                              e.target.style.background = colors.surface;
+                              e.target.style.color = colors.textPrimary;
+                            }}
+                          >
+                            Start Over
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+              ) : (
+                <div>Guide not loaded</div>
+              )
+            ) : learningView === "quiz" ? (
+              // Quiz view
+              activeQuiz ? (
+                <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingBottom: 16, borderBottom: `1px solid ${colors.border}` }}>
+                    <h3 style={{ color: colors.textPrimary, margin: 0, fontSize: 18, fontWeight: 600 }}>
+                      {activeQuiz.title?.[language] || activeQuiz.title}
+                    </h3>
+                    <button
+                      onClick={() => {
+                        setLearningView("menu");
+                        setActiveQuiz(null);
+                        setQuizResults(null);
+                      }}
+                      style={{
+                        padding: "8px 16px",
+                        background: colors.surfaceLight,
+                        border: `1px solid ${colors.border}`,
+                        borderRadius: 8,
+                        color: colors.textPrimary,
+                        fontSize: 12,
+                        fontWeight: 600,
+                        cursor: "pointer",
+                        transition: "all 0.2s",
+                      }}
+                      onMouseEnter={(e) => {
+                        e.target.style.background = colors.accentSecondary;
+                        e.target.style.color = "white";
+                      }}
+                      onMouseLeave={(e) => {
+                        e.target.style.background = colors.surfaceLight;
+                        e.target.style.color = colors.textPrimary;
+                      }}
+                    >
+                      ← Back to Menu
+                    </button>
+                  </div>
+
+                  {quizResults === null ? (
+                    // Taking quiz
+                    <div>
+                      {/* Progress bar */}
+                      <div style={{ marginBottom: 24 }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8, fontSize: 12, color: colors.textSecondary }}>
+                          <span>Question {quizCurrentQ + 1} of {quizQuestions.length}</span>
+                          <span>{Math.round((quizCurrentQ / quizQuestions.length) * 100)}%</span>
+                        </div>
+                        <div style={{ height: 8, background: colors.surfaceLight, borderRadius: 4, overflow: "hidden" }}>
+                          <div
+                            style={{
+                              height: "100%",
+                              background: "#ec4899",
+                              width: `${(quizCurrentQ / quizQuestions.length) * 100}%`,
+                              transition: "width 0.3s ease",
+                            }}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Current question */}
+                      {quizQuestions[quizCurrentQ] && (
+                        <div>
+                          <div style={{ padding: 20, background: colors.surfaceLight, borderRadius: 12, marginBottom: 20 }}>
+                            <h4 style={{ color: colors.textPrimary, margin: "0 0 16px 0", fontSize: 15, fontWeight: 600 }}>
+                              {quizQuestions[quizCurrentQ].text?.[language] || quizQuestions[quizCurrentQ].text}
+                            </h4>
+                            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                              {quizQuestions[quizCurrentQ].answers?.map((ans, i) => {
+                                const isSelected = quizAnswers[quizCurrentQ] === ans.id;
+                                return (
+                                  <button
+                                    key={i}
+                                    onClick={() => setQuizAnswers(prev => ({ ...prev, [quizCurrentQ]: ans.id }))}
+                                    style={{
+                                      padding: "12px 16px",
+                                      background: isSelected ? colors.accentPrimary : colors.surface,
+                                      border: `2px solid ${isSelected ? colors.accentPrimary : colors.border}`,
+                                      borderRadius: 8,
+                                      color: isSelected ? "white" : colors.textPrimary,
+                                      fontSize: 14,
+                                      fontWeight: 500,
+                                      cursor: "pointer",
+                                      transition: "all 0.2s",
+                                      textAlign: "left",
+                                    }}
+                                    onMouseEnter={(e) => {
+                                      if (!isSelected) {
+                                        e.target.style.background = colors.surfaceLight;
+                                        e.target.style.borderColor = colors.accentPrimary;
+                                      }
+                                    }}
+                                    onMouseLeave={(e) => {
+                                      if (!isSelected) {
+                                        e.target.style.background = colors.surface;
+                                        e.target.style.borderColor = colors.border;
+                                      }
+                                    }}
+                                  >
+                                    {ans.text?.[language] || ans.text}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+
+                          {/* Quiz navigation */}
+                          <div style={{ display: "flex", gap: 12, justifyContent: "space-between" }}>
+                            <button
+                              onClick={() => setQuizCurrentQ(prev => Math.max(0, prev - 1))}
+                              disabled={quizCurrentQ === 0}
+                              style={{
+                                padding: "10px 16px",
+                                background: quizCurrentQ === 0 ? colors.borderLight : colors.surface,
+                                border: `1px solid ${colors.border}`,
+                                borderRadius: 8,
+                                color: quizCurrentQ === 0 ? colors.textSecondary : colors.textPrimary,
+                                fontSize: 13,
+                                fontWeight: 600,
+                                cursor: quizCurrentQ === 0 ? "not-allowed" : "pointer",
+                                opacity: quizCurrentQ === 0 ? 0.5 : 1,
+                                transition: "all 0.2s",
+                              }}
+                              onMouseEnter={(e) => {
+                                if (quizCurrentQ > 0) {
+                                  e.target.style.background = colors.accentSecondary;
+                                  e.target.style.color = "white";
+                                }
+                              }}
+                              onMouseLeave={(e) => {
+                                if (quizCurrentQ > 0) {
+                                  e.target.style.background = colors.surface;
+                                  e.target.style.color = colors.textPrimary;
+                                }
+                              }}
+                            >
+                              ← Previous
+                            </button>
+
+                            {quizCurrentQ === quizQuestions.length - 1 ? (
+                              <button
+                                onClick={submitQuiz}
+                                disabled={quizSubmitting || quizAnswers[quizCurrentQ] === undefined}
+                                style={{
+                                  padding: "10px 24px",
+                                  background: quizAnswers[quizCurrentQ] === undefined ? colors.borderLight : colors.accentPrimary,
+                                  border: "none",
+                                  borderRadius: 8,
+                                  color: "white",
+                                  fontSize: 13,
+                                  fontWeight: 600,
+                                  cursor: quizAnswers[quizCurrentQ] === undefined ? "not-allowed" : "pointer",
+                                  opacity: quizAnswers[quizCurrentQ] === undefined ? 0.5 : 1,
+                                  transition: "all 0.2s",
+                                }}
+                                onMouseEnter={(e) => {
+                                  if (quizAnswers[quizCurrentQ] !== undefined && !quizSubmitting) {
+                                    e.target.style.boxShadow = `0 0 12px ${colors.accentPrimary}60`;
+                                  }
+                                }}
+                                onMouseLeave={(e) => {
+                                  e.target.style.boxShadow = "none";
+                                }}
+                              >
+                                {quizSubmitting ? "Submitting..." : "Submit Quiz"}
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => setQuizCurrentQ(prev => Math.min(quizQuestions.length - 1, prev + 1))}
+                                style={{
+                                  padding: "10px 24px",
+                                  background: colors.accentPrimary,
+                                  border: "none",
+                                  borderRadius: 8,
+                                  color: "white",
+                                  fontSize: 13,
+                                  fontWeight: 600,
+                                  cursor: "pointer",
+                                  transition: "all 0.2s",
+                                }}
+                                onMouseEnter={(e) => {
+                                  e.target.style.boxShadow = `0 0 12px ${colors.accentPrimary}60`;
+                                }}
+                                onMouseLeave={(e) => {
+                                  e.target.style.boxShadow = "none";
+                                }}
+                              >
+                                Next →
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    // Quiz results
+                    <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+                      {/* Score display */}
+                      <div style={{
+                        padding: 40,
+                        background: colors.surfaceLight,
+                        borderRadius: 14,
+                        textAlign: "center",
+                      }}>
+                        <div style={{ fontSize: 64, fontWeight: 900, color: quizResults.passed ? "#22c55e" : "#ef4444", marginBottom: 12 }}>
+                          {quizResults.percentage}%
+                        </div>
+                        <div style={{
+                          padding: "8px 16px",
+                          background: quizResults.passed ? "#22c55e" : "#ef4444",
+                          color: "white",
+                          fontSize: 12,
+                          fontWeight: 700,
+                          borderRadius: 6,
+                          display: "inline-block",
+                          marginBottom: 12,
+                        }}>
+                          {quizResults.passed ? "PASSED" : "NOT PASSED"}
+                        </div>
+                        <p style={{ color: colors.textSecondary, fontSize: 14, margin: 0 }}>
+                          You answered {quizResults.score} out of {quizResults.totalQuestions} questions correctly.
+                        </p>
+                      </div>
+
+                      {/* Per-question breakdown */}
+                      {quizResults.results && quizResults.results.length > 0 && (
+                        <div>
+                          <h4 style={{ color: colors.textPrimary, margin: "0 0 16px 0", fontSize: 14, fontWeight: 700, textTransform: "uppercase" }}>
+                            Answer Breakdown
+                          </h4>
+                          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                            {quizResults.results.map((result, i) => (
+                              <div
+                                key={i}
+                                style={{
+                                  padding: 16,
+                                  background: colors.surfaceLight,
+                                  borderRadius: 12,
+                                  borderLeft: `4px solid ${result.is_correct ? "#22c55e" : "#ef4444"}`,
+                                }}
+                              >
+                                <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
+                                  <div style={{
+                                    fontSize: 20,
+                                    fontWeight: 700,
+                                    color: result.is_correct ? "#22c55e" : "#ef4444",
+                                  }}>
+                                    {result.is_correct ? "✓" : "✕"}
+                                  </div>
+                                  <div style={{ flex: 1 }}>
+                                    <p style={{ color: colors.textPrimary, margin: 0, fontWeight: 500, marginBottom: 8 }}>
+                                      Question {i + 1}: {result.question?.[language] || result.question}
+                                    </p>
+                                    <p style={{ color: colors.textSecondary, margin: 0, fontSize: 13, marginBottom: 6 }}>
+                                      Your answer: <span style={{ color: colors.textPrimary, fontWeight: 500 }}>{result.userAnswer?.[language] || result.userAnswer}</span>
+                                    </p>
+                                    {!result.is_correct && (
+                                      <p style={{ color: "#22c55e", margin: 0, fontSize: 13, fontWeight: 500 }}>
+                                        Correct answer: {result.correctAnswer?.[language] || result.correctAnswer}
+                                      </p>
+                                    )}
+                                    {result.explanation && (
+                                      <p style={{ color: colors.textSecondary, margin: "8px 0 0 0", fontSize: 12, fontStyle: "italic", lineHeight: 1.5 }}>
+                                        {result.explanation?.[language] || result.explanation}
+                                      </p>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Action buttons */}
+                      <div style={{ display: "flex", gap: 12, justifyContent: "center" }}>
+                        <button
+                          onClick={() => openQuiz(activeQuiz.slug)}
+                          style={{
+                            padding: "10px 24px",
+                            background: colors.accentPrimary,
+                            border: "none",
+                            borderRadius: 8,
+                            color: "white",
+                            fontSize: 13,
+                            fontWeight: 600,
+                            cursor: "pointer",
+                            transition: "all 0.2s",
+                          }}
+                          onMouseEnter={(e) => {
+                            e.target.style.boxShadow = `0 0 12px ${colors.accentPrimary}60`;
+                          }}
+                          onMouseLeave={(e) => {
+                            e.target.style.boxShadow = "none";
+                          }}
+                        >
+                          Retake Quiz
+                        </button>
+                        <button
+                          onClick={() => {
+                            setLearningView("menu");
+                            setActiveQuiz(null);
+                            setQuizResults(null);
+                          }}
+                          style={{
+                            padding: "10px 24px",
+                            background: colors.surface,
+                            border: `1px solid ${colors.border}`,
+                            borderRadius: 8,
+                            color: colors.textPrimary,
+                            fontSize: 13,
+                            fontWeight: 600,
+                            cursor: "pointer",
+                            transition: "all 0.2s",
+                          }}
+                          onMouseEnter={(e) => {
+                            e.target.style.background = colors.surfaceLight;
+                            e.target.style.borderColor = colors.accentSecondary;
+                          }}
+                          onMouseLeave={(e) => {
+                            e.target.style.background = colors.surface;
+                            e.target.style.borderColor = colors.border;
+                          }}
+                        >
+                          Back to Menu
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div>Quiz not loaded</div>
+              )
+            ) : null
+          ) : contentLoading ? (
             <div style={{ color: colors.textSecondary, fontSize: 14, padding: 40, textAlign: "center", animation: "pulse 1.5s ease-in-out infinite" }}>
               <div style={{ fontSize: 24, marginBottom: 12 }}>⏳</div>
               Loading resources...

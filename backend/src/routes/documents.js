@@ -25,6 +25,32 @@ documentsRouter.get('/', async (req, res) => {
   res.json({ documents: data, total: count });
 });
 
+// PATCH /api/documents/:id — Update document metadata
+documentsRouter.patch('/:id', async (req, res) => {
+  const { title, description, doc_type, tab_slug, language, tags } = req.body;
+  const updates = {};
+  if (title !== undefined) updates.title = title;
+  if (description !== undefined) updates.description = description;
+  if (doc_type !== undefined) updates.doc_type = doc_type;
+  if (tab_slug !== undefined) updates.tab_slug = tab_slug || null;
+  if (language !== undefined) updates.language = language;
+  if (tags !== undefined) updates.tags = Array.isArray(tags) ? tags : tags.split(',').map(t => t.trim()).filter(Boolean);
+
+  if (Object.keys(updates).length === 0) {
+    return res.status(400).json({ error: 'No fields to update' });
+  }
+
+  const { data, error } = await supabase
+    .from('documents')
+    .update(updates)
+    .eq('id', req.params.id)
+    .select()
+    .single();
+
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ document: data });
+});
+
 // GET /api/documents/:id — Single document with full content
 documentsRouter.get('/:id', async (req, res) => {
   const { data, error } = await supabase

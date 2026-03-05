@@ -18,6 +18,7 @@ import { searchRouter } from './routes/search.js';
 import { ingestRouter } from './routes/ingest.js';
 import { authRouter } from './routes/auth.js';
 import { usersRouter } from './routes/users.js';
+import { learningRouter } from './routes/learning.js';
 import { authMiddleware } from './middleware/auth.js';
 import { auditMiddleware } from './middleware/audit.js';
 import { logger } from './utils/logger.js';
@@ -319,6 +320,7 @@ app.use('/api/media', authMiddleware, mediaRouter);
 app.use('/api/search', authMiddleware, searchRouter);
 app.use('/api/ingest', authMiddleware, ingestRouter);
 app.use('/api/auth/users', authMiddleware, usersRouter);
+app.use('/api/learning', authMiddleware, learningRouter);
 
 // ─── 404 Handler ──────────────────────────────────────────────
 app.use((req, res) => {
