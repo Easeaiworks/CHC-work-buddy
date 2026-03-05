@@ -432,12 +432,18 @@ function DocumentLibrary({ token, onToast, refreshKey }) {
   };
 
   const handleSaveEdit = async () => {
+    if (!editDoc?.id) { onToast("No document selected", "error"); return; }
     setSaving(true);
     try {
+      const payload = { ...editForm };
+      // Convert comma-separated tags string to array for the backend
+      if (typeof payload.tags === 'string') {
+        payload.tags = payload.tags.split(',').map(t => t.trim()).filter(Boolean);
+      }
       const res = await api(`/api/documents/${editDoc.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(editForm),
+        body: JSON.stringify(payload),
       });
       setDocs(prev => prev.map(d => d.id === editDoc.id ? { ...d, ...res.document } : d));
       onToast("Document updated", "success");
@@ -663,12 +669,21 @@ function MediaManager({ token, onToast, refreshKey }) {
   };
 
   const handleSaveMediaEdit = async () => {
+    if (!editMedia?.id) { onToast("No media selected", "error"); return; }
     setSavingEdit(true);
     try {
+      const payload = { ...editForm };
+      // Convert comma-separated tags/keywords strings to arrays
+      if (typeof payload.tags === 'string') {
+        payload.tags = payload.tags.split(',').map(t => t.trim()).filter(Boolean);
+      }
+      if (typeof payload.keywords === 'string') {
+        payload.keywords = payload.keywords.split(',').map(k => k.trim()).filter(Boolean);
+      }
       const res = await api(`/api/media/${editMedia.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(editForm),
+        body: JSON.stringify(payload),
       });
       setMedia(prev => prev.map(m => m.id === editMedia.id ? { ...m, ...res.media } : m));
       onToast("Media updated", "success");
