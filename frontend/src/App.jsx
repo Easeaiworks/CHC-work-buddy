@@ -874,6 +874,7 @@ export default function App() {
   const [quizResults, setQuizResults] = useState(null);
   const [quizSubmitting, setQuizSubmitting] = useState(false);
   const [learningLoading, setLearningLoading] = useState(false);
+  const [showResources, setShowResources] = useState(false);
 
   const chatEndRef = useRef(null);
   const recognitionRef = useRef(null);
@@ -2581,6 +2582,90 @@ export default function App() {
 
       {/* Media Viewer Modal */}
       {mediaViewer && <MediaViewer item={mediaViewer} onClose={() => setMediaViewer(null)} theme={theme} />}
+
+      {/* Resources & Attribution Footer Bar */}
+      <div style={{
+        position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 900,
+        background: colors.surface, borderTop: `1px solid ${colors.border}`,
+        transition: "all 0.3s ease",
+      }}>
+        <button onClick={() => setShowResources(p => !p)} style={{
+          width: "100%", padding: "8px 16px", border: "none", background: "transparent",
+          color: colors.textSecondary, cursor: "pointer", display: "flex", alignItems: "center",
+          justifyContent: "center", gap: 8, fontSize: 12,
+        }}>
+          <span>{showResources ? "▼" : "▲"}</span>
+          <span>Resources & Attribution</span>
+          <span style={{ opacity: 0.5 }}>|</span>
+          <span>Terms of Use</span>
+        </button>
+
+        {showResources && (
+          <div style={{
+            maxHeight: 320, overflowY: "auto", padding: "12px 24px 16px",
+            background: colors.background, borderTop: `1px solid ${colors.border}`,
+            fontSize: 12, lineHeight: 1.6, color: colors.textSecondary,
+          }}>
+            <div style={{ maxWidth: 900, margin: "0 auto" }}>
+              <p style={{ fontWeight: 600, color: colors.textPrimary, marginBottom: 8, fontSize: 13 }}>
+                Data Sources & Attribution
+              </p>
+              <p style={{ marginBottom: 12 }}>
+                Body Shop Wiz by Refinish AI (Ease AI Works) uses information from the following public domain and freely accessible sources.
+                All government publications are U.S. federal works in the public domain.
+              </p>
+
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 16, marginBottom: 16 }}>
+                <div>
+                  <p style={{ fontWeight: 600, color: colors.accentPrimary, marginBottom: 4 }}>OSHA (Public Domain)</p>
+                  <p>Autobody Repair & Refinishing Standards — <a href="https://www.osha.gov/autobody" target="_blank" rel="noopener" style={{ color: colors.accentPrimary }}>osha.gov/autobody</a></p>
+                  <p>Hazard Communication Standard (29 CFR 1910.1200)</p>
+                  <p>Respiratory Protection (29 CFR 1910.134)</p>
+                  <p>Spray Finishing Operations (29 CFR 1910.94)</p>
+                </div>
+                <div>
+                  <p style={{ fontWeight: 600, color: colors.accentPrimary, marginBottom: 4 }}>EPA (Public Domain)</p>
+                  <p>VOC Limits: 40 CFR 59 Subpart B — <a href="https://www.ecfr.gov/current/title-40/chapter-I/subchapter-C/part-59/subpart-B" target="_blank" rel="noopener" style={{ color: colors.accentPrimary }}>ecfr.gov</a></p>
+                  <p>6H Rule / NESHAP: 40 CFR 63 Subpart HHHHHH</p>
+                  <p>RCRA Hazardous Waste (40 CFR 260-270)</p>
+                </div>
+                <div>
+                  <p style={{ fontWeight: 600, color: colors.accentPrimary, marginBottom: 4 }}>NIOSH / CDC (Public Domain)</p>
+                  <p>Sanding Dust Control (Pub. 96-105) — <a href="https://www.cdc.gov/niosh/docs/hazardcontrol/hc1.html" target="_blank" rel="noopener" style={{ color: colors.accentPrimary }}>cdc.gov/niosh</a></p>
+                  <p>Paint Overspray Control (Pub. 96-106) — <a href="https://www.cdc.gov/niosh/docs/hazardcontrol/hc2.html" target="_blank" rel="noopener" style={{ color: colors.accentPrimary }}>cdc.gov/niosh</a></p>
+                </div>
+                <div>
+                  <p style={{ fontWeight: 600, color: colors.accentPrimary, marginBottom: 4 }}>Manufacturer Resources (Free Access)</p>
+                  <p>PPG SDS/TDS — <a href="https://www.ppg.com/en-US/refinish/support/health-and-safety/sds-search" target="_blank" rel="noopener" style={{ color: colors.accentPrimary }}>ppg.com</a></p>
+                  <p>Axalta/Cromax — <a href="https://www.axalta.com/cromax_us/en_US/products/technical-center.html" target="_blank" rel="noopener" style={{ color: colors.accentPrimary }}>axalta.com</a></p>
+                  <p>Sherwin-Williams — <a href="https://tds.sherwin-automotive.com/en/show_region_products/all" target="_blank" rel="noopener" style={{ color: colors.accentPrimary }}>sherwin-automotive.com</a></p>
+                  <p>BASF — <a href="https://products.basf.com/global/en/downloads" target="_blank" rel="noopener" style={{ color: colors.accentPrimary }}>basf.com</a></p>
+                  <p>3M — <a href="https://www.3m.com/3M/en_US/company-us/SDS-search/" target="_blank" rel="noopener" style={{ color: colors.accentPrimary }}>3m.com</a></p>
+                </div>
+                <div>
+                  <p style={{ fontWeight: 600, color: colors.accentPrimary, marginBottom: 4 }}>Industry Training (Reference)</p>
+                  <p>I-CAR — <a href="https://www.i-car.com/" target="_blank" rel="noopener" style={{ color: colors.accentPrimary }}>i-car.com</a></p>
+                  <p>PaintDocs.com — <a href="https://paintdocs.com/" target="_blank" rel="noopener" style={{ color: colors.accentPrimary }}>paintdocs.com</a></p>
+                </div>
+              </div>
+
+              <div style={{ borderTop: `1px solid ${colors.border}`, paddingTop: 12, marginTop: 4 }}>
+                <p style={{ fontWeight: 600, color: colors.textPrimary, marginBottom: 6, fontSize: 13 }}>Important Disclaimer</p>
+                <p style={{ fontSize: 11 }}>
+                  Body Shop Wiz is an AI-powered assistant provided by Refinish AI (Ease AI Works). AI-generated content may contain inaccuracies.
+                  This tool does NOT replace professional judgment, OEM repair procedures, hands-on vehicle inspection, or qualified technician expertise.
+                  All AI outputs must be independently verified before use in any repair, estimate, or safety-critical decision.
+                  By using this application, you agree to our Terms of Use and accept full responsibility for verifying all information before relying on it.
+                  Refinish AI is not liable for decisions made based on AI outputs. See full Terms & Conditions for details.
+                </p>
+                <p style={{ fontSize: 11, marginTop: 6, opacity: 0.7 }}>
+                  © {new Date().getFullYear()} Refinish AI — Ease AI Works. All rights reserved. Powered by Anthropic Claude.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
