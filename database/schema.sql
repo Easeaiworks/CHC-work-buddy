@@ -277,7 +277,15 @@ RETURNS TABLE (
 )
 LANGUAGE plpgsql
 AS $$
+DECLARE
+  words TEXT[];
 BEGIN
+  -- Split query into individual words (3+ chars) for per-word matching
+  words := ARRAY(
+    SELECT DISTINCT w FROM unnest(regexp_split_to_array(LOWER(search_query), '\s+')) AS w
+    WHERE length(w) >= 3
+  );
+
   RETURN QUERY
   SELECT DISTINCT ON (d.id)
     d.id,
@@ -290,15 +298,23 @@ BEGIN
       -- Full-text search on title + description
       ts_rank(to_tsvector('english', COALESCE(d.title,'') || ' ' || COALESCE(d.description, '')),
               plainto_tsquery('english', search_query)),
-      -- Boost for ILIKE match on title (catches acronyms like SDS, PPG)
+      -- ILIKE match on title — full query
       CASE WHEN d.title ILIKE '%' || search_query || '%' THEN 0.8 ELSE 0.0 END,
-      -- Boost for doc_type match
+      -- ILIKE match on title — any individual word (catches "SDS" from "show me SDS sheets")
+      CASE WHEN EXISTS (
+        SELECT 1 FROM unnest(words) AS w WHERE d.title ILIKE '%' || w || '%'
+      ) THEN 0.6 ELSE 0.0 END,
+      -- doc_type match — exact or per-word
       CASE WHEN LOWER(d.doc_type) = LOWER(search_query) THEN 0.9
+           WHEN EXISTS (SELECT 1 FROM unnest(words) AS w WHERE LOWER(d.doc_type) = w) THEN 0.85
            WHEN d.doc_type ILIKE '%' || search_query || '%' THEN 0.7 ELSE 0.0 END,
-      -- Boost for tag match
+      -- tag match — full query or any word
       CASE WHEN EXISTS (
         SELECT 1 FROM unnest(d.tags) AS t WHERE t ILIKE '%' || search_query || '%'
-      ) THEN 0.75 ELSE 0.0 END
+      ) THEN 0.75
+      WHEN EXISTS (
+        SELECT 1 FROM unnest(d.tags) AS t, unnest(words) AS w WHERE t ILIKE '%' || w || '%'
+      ) THEN 0.65 ELSE 0.0 END
     )::FLOAT AS rank
   FROM public.documents d
   WHERE d.is_active = true
@@ -307,15 +323,14 @@ BEGIN
       -- Full-text search
       to_tsvector('english', COALESCE(d.title,'') || ' ' || COALESCE(d.description, ''))
         @@ plainto_tsquery('english', search_query)
-      -- OR ILIKE on title (catches acronyms)
+      -- OR title matches full query or any word
       OR d.title ILIKE '%' || search_query || '%'
-      -- OR doc_type match
+      OR EXISTS (SELECT 1 FROM unnest(words) AS w WHERE d.title ILIKE '%' || w || '%')
+      -- OR doc_type matches
       OR LOWER(d.doc_type) = LOWER(search_query)
-      OR d.doc_type ILIKE '%' || search_query || '%'
-      -- OR tag match
-      OR EXISTS (
-        SELECT 1 FROM unnest(d.tags) AS t WHERE t ILIKE '%' || search_query || '%'
-      )
+      OR EXISTS (SELECT 1 FROM unnest(words) AS w WHERE LOWER(d.doc_type) = w)
+      -- OR tag matches any word
+      OR EXISTS (SELECT 1 FROM unnest(d.tags) AS t, unnest(words) AS w WHERE t ILIKE '%' || w || '%')
     )
   ORDER BY d.id, rank DESC
   LIMIT result_limit;

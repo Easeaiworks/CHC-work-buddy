@@ -52,21 +52,62 @@ agentRouter.post('/query', async (req, res) => {
     const wantsVideo = hasVideoIntent(message);
     const videoSearchTerms = wantsVideo ? extractVideoSearchTerms(message) : null;
 
-    // Run embedding search, keyword search, and media search in parallel
-    const [embedding, mediaResults, keywordResults] = await Promise.all([
+    // Run embedding search, keyword search (tab-filtered + cross-tab), and media search in parallel
+    const [embedding, mediaResults, tabKeywordResults, allKeywordResults] = await Promise.all([
       openai ? generateEmbedding(message) : Promise.resolve(null),
       wantsVideo ? searchMedia(videoSearchTerms || message, tabSlug, lang) : Promise.resolve([]),
+      // Tab-filtered keyword search
       supabase.rpc('search_documents', {
         search_query: message, tab_filter: tabSlug || null, result_limit: 6,
       }).then(r => r.data || []).catch(e => {
-        logger.warn('Keyword search failed (non-fatal)', { error: e.message });
+        logger.warn('Tab keyword search failed (non-fatal)', { error: e.message });
+        return [];
+      }),
+      // Cross-tab keyword search (no tab filter — finds docs in any tab)
+      supabase.rpc('search_documents', {
+        search_query: message, tab_filter: null, result_limit: 6,
+      }).then(r => r.data || []).catch(e => {
+        logger.warn('Cross-tab keyword search failed (non-fatal)', { error: e.message });
         return [];
       }),
     ]);
 
-    const relevantChunks = embedding ? await matchDocuments(embedding, {
+    // Merge tab-filtered + cross-tab keyword results, dedup by id
+    const kwSeen = new Set();
+    const keywordResults = [];
+    for (const r of [...tabKeywordResults, ...allKeywordResults]) {
+      if (!kwSeen.has(r.id)) {
+        kwSeen.add(r.id);
+        keywordResults.push(r);
+      }
+    }
+
+    logger.info('Search results', {
+      query: message.slice(0, 80),
+      tabSlug,
+      embeddingGenerated: !!embedding,
+      tabKeywordHits: tabKeywordResults.length,
+      crossTabKeywordHits: allKeywordResults.length,
+      mergedKeywordHits: keywordResults.length,
+    });
+
+    // Vector search — also try cross-tab if tab-filtered gives few results
+    let relevantChunks = embedding ? await matchDocuments(embedding, {
       tabFilter: tabSlug, matchCount: 8, threshold: 0.45,
     }) : [];
+
+    if (relevantChunks.length < 3 && embedding) {
+      const crossTabChunks = await matchDocuments(embedding, {
+        tabFilter: null, matchCount: 8, threshold: 0.45,
+      });
+      const chunkSeen = new Set(relevantChunks.map(c => c.document_id));
+      for (const c of crossTabChunks) {
+        if (!chunkSeen.has(c.document_id)) {
+          chunkSeen.add(c.document_id);
+          relevantChunks.push(c);
+        }
+      }
+    }
 
     // If keyword search found documents, also fetch their chunks for context
     let keywordChunks = [];
@@ -108,6 +149,13 @@ agentRouter.post('/query', async (req, res) => {
     }
     // Replace relevantChunks reference for downstream use
     const mergedChunks = allChunks.slice(0, 10);
+
+    logger.info('Final merged context', {
+      vectorChunks: relevantChunks.length,
+      keywordChunks: keywordChunks.length,
+      mergedTotal: mergedChunks.length,
+      docTitles: [...new Set(mergedChunks.map(c => c.title))].slice(0, 5),
+    });
 
     let conversationHistory = [];
     if (sessionId) {
