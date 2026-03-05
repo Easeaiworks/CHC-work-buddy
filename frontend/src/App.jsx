@@ -885,7 +885,7 @@ export default function App() {
               WebkitBackgroundClip: "text",
               WebkitTextFillColor: "transparent",
             }}>
-              BODY<span style={{ color: colors.accentSecondary }}>SHOP</span> AI
+              BODY SHOP<span style={{ color: colors.accentSecondary }}> WIZ</span>
             </h1>
             <p style={{ color: colors.textSecondary, fontSize: 12, letterSpacing: 3, textTransform: "uppercase", marginTop: 6, fontWeight: 600 }}>
               Professional Assistant
@@ -1115,9 +1115,9 @@ export default function App() {
           }}>B</div>
           <div>
             <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 900, fontSize: 14, letterSpacing: 2, textTransform: "uppercase", lineHeight: 1, color: colors.textPrimary }}>
-              BODY<span style={{ color: colors.accentSecondary }}>SHOP</span>
+              BODY SHOP<span style={{ color: colors.accentSecondary }}> WIZ</span>
             </div>
-            <div style={{ fontSize: 9, color: colors.textSecondary, letterSpacing: 2, textTransform: "uppercase", fontWeight: 600 }}>AI ASSISTANT</div>
+            <div style={{ fontSize: 9, color: colors.textSecondary, letterSpacing: 2, textTransform: "uppercase", fontWeight: 600 }}>SHOP ASSISTANT</div>
           </div>
         </div>
 
