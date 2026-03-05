@@ -834,7 +834,7 @@ export default function App() {
   const [searchResults, setSearchResults] = useState([]);
   const [searchLoading, setSearchLoading] = useState(false);
   const [messages, setMessages] = useState([
-    { role: "assistant", content: "Hi! I'm Max, your Body Shop Wiz assistant. I can help you with SDS sheets, tech procedures, mixing ratios, training videos and more. Ask me anything or use the tabs above to browse resources.", sources: [] },
+    { role: "assistant", content: "Hi! I'm Max, your Body Shop Wiz. I can help with SDS sheets, tech procedures, mixing ratios, training videos and more. Ask me anything or use the tabs above to browse resources.", sources: [] },
   ]);
   const [inputValue, setInputValue] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -1399,7 +1399,7 @@ export default function App() {
             <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 900, fontSize: 14, letterSpacing: 2, textTransform: "uppercase", lineHeight: 1, color: colors.textPrimary }}>
               BODY SHOP<span style={{ color: colors.accentSecondary }}> WIZ</span>
             </div>
-            <div style={{ fontSize: 9, color: colors.textSecondary, letterSpacing: 2, textTransform: "uppercase", fontWeight: 600 }}>SHOP ASSISTANT</div>
+            <div style={{ fontSize: 9, color: colors.textSecondary, letterSpacing: 2, textTransform: "uppercase", fontWeight: 600 }}>COLLISION REPAIR</div>
           </div>
         </div>
 
@@ -1650,7 +1650,7 @@ export default function App() {
               </div>
               <div style={{ flex: 1 }}>
                 <div style={{ color: colors.textPrimary, fontSize: 13, lineHeight: 1.6, fontWeight: 500 }}>
-                  <span style={{ fontWeight: 700, color: colors.accentSecondary }}>Max</span> is your Body Shop Wiz expert. Ask about procedures, mixing ratios, SDS safety or any repair question.
+                  <span style={{ fontWeight: 700, color: colors.accentSecondary }}>Max</span> is your Body Shop Wiz. Ask about procedures, mixing ratios, SDS safety or any repair question.
                 </div>
                 <div style={{ color: colors.textSecondary, fontSize: 10, marginTop: 6, letterSpacing: 1, fontWeight: 600 }}>
                   🇨🇦 Trained on collision repair · EN/FR/ES
