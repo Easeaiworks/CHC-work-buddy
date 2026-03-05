@@ -26,11 +26,44 @@ authRouter.post('/login', async (req, res) => {
 
     res.json({
       token: data.session.access_token,
+      refreshToken: data.session.refresh_token,
+      expiresAt: data.session.expires_at,
       user: { ...data.user, ...profile },
     });
   } catch (err) {
     logger.error('Login error', { error: err.message });
     res.status(500).json({ error: 'Authentication failed' });
+  }
+});
+
+// POST /api/auth/refresh — Refresh an expired access token
+authRouter.post('/refresh', async (req, res) => {
+  const { refreshToken } = req.body;
+  if (!refreshToken) {
+    return res.status(400).json({ error: 'Refresh token required' });
+  }
+
+  try {
+    const { data, error } = await supabase.auth.refreshSession({ refresh_token: refreshToken });
+    if (error || !data.session) {
+      return res.status(401).json({ error: 'Refresh token expired. Please sign in again.' });
+    }
+
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', data.user.id)
+      .single();
+
+    res.json({
+      token: data.session.access_token,
+      refreshToken: data.session.refresh_token,
+      expiresAt: data.session.expires_at,
+      user: { ...data.user, ...profile },
+    });
+  } catch (err) {
+    logger.error('Refresh error', { error: err.message });
+    res.status(500).json({ error: 'Token refresh failed' });
   }
 });
 
@@ -87,6 +120,8 @@ authRouter.post('/register', async (req, res) => {
 
       return res.json({
         token: signInData.session.access_token,
+        refreshToken: signInData.session.refresh_token,
+        expiresAt: signInData.session.expires_at,
         user: signInData.user,
         message: 'Registration successful',
       });
@@ -95,6 +130,8 @@ authRouter.post('/register', async (req, res) => {
     // If session exists (email confirmation disabled), return it directly
     res.json({
       token: data.session?.access_token,
+      refreshToken: data.session?.refresh_token,
+      expiresAt: data.session?.expires_at,
       user: data.user,
       message: 'Registration successful',
     });

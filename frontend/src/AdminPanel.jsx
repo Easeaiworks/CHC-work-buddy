@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import { authFetch } from "./authFetch.js";
 
 // ─── Config ───────────────────────────────────────────────────
 const API_BASE = import.meta?.env?.VITE_API_URL || "https://chc-work-buddy-production-5b0e.up.railway.app";
@@ -34,9 +35,9 @@ const typeColor = { sds: "#ef4444", tech_sheet: "#8b5cf6", manual: "#3b82f6", pr
 // ─── API client ───────────────────────────────────────────────
 function useApi(token) {
   const req = useCallback(async (path, opts = {}) => {
-    const res = await fetch(`${API_BASE}${path}`, {
+    const res = await authFetch(`${API_BASE}${path}`, {
       ...opts,
-      headers: { Authorization: `Bearer ${token}`, ...(opts.headers || {}) },
+      headers: { ...(opts.headers || {}) },
     });
     if (!res.ok) throw new Error((await res.json()).error || "Request failed");
     return res.json();
@@ -315,9 +316,8 @@ function UploadDocument({ token, onSuccess, onToast }) {
       fd.append("file", file);
       Object.entries(form).forEach(([k, v]) => fd.append(k, v));
       setProgress(40);
-      const res = await fetch(`${API_BASE}/api/ingest/document`, {
+      const res = await authFetch(`${API_BASE}/api/ingest/document`, {
         method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
         body: fd,
       });
       setProgress(80);
@@ -629,9 +629,8 @@ function MediaManager({ token, onToast, refreshKey }) {
         const fd = new FormData();
         fd.append("file", file);
         Object.entries(payload).forEach(([k, v]) => v && fd.append(k, v));
-        const res = await fetch(`${API_BASE}/api/ingest/media`, {
+        const res = await authFetch(`${API_BASE}/api/ingest/media`, {
           method: "POST",
-          headers: { Authorization: `Bearer ${token}` },
           body: fd,
         });
         if (!res.ok) throw new Error((await res.json()).error);

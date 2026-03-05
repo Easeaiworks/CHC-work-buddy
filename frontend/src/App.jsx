@@ -1,4 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import { authFetch } from "./authFetch.js";
+
+// ─── API Base ────────────────────────────────────────────────
+const API_BASE = import.meta.env.VITE_API_URL || "https://chc-work-buddy-production-5b0e.up.railway.app";
 
 // ─── Industry SVG Icons ──────────────────────────────────────
 const TabIcon = ({ type, size = 22, color = "currentColor" }) => {
@@ -71,8 +75,6 @@ const TABS = [
   { slug: "detailing-qc",        label: { en: "Detailing & QC",      fr: "Finition & CQ",        es: "Detallado y CC" },             iconType: "detailing", color: "#22c55e" },
   { slug: "learning",            label: { en: "Learning",            fr: "Apprentissage",        es: "Aprendizaje" },                iconType: "learning",  color: "#ec4899" },
 ];
-
-const API_BASE = import.meta.env.VITE_API_URL || "https://chc-work-buddy-production-5b0e.up.railway.app";
 
 // ─── Theme Colors ─────────────────────────────────────────────
 const themes = {
@@ -608,9 +610,7 @@ function DocViewer({ doc, onClose, token, theme = "dark" }) {
     setLoading(true);
     setContent(null);
     setFetchError(null);
-    fetch(`${API_BASE}/api/documents/${doc.id}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
+    authFetch(`${API_BASE}/api/documents/${doc.id}`)
       .then(r => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         return r.json();
@@ -880,6 +880,26 @@ export default function App() {
   const speechSynthRef = useRef(null);
   const colors = themes[theme];
 
+  // Listen for token refresh / session expiry from authFetch
+  useEffect(() => {
+    const onRefreshed = (e) => {
+      const d = e.detail;
+      if (d?.token) setToken(d.token);
+      if (d?.user) setUser(d.user);
+    };
+    const onExpired = () => {
+      setToken(null);
+      setUser(null);
+      setAuthError("Your session has expired. Please sign in again.");
+    };
+    window.addEventListener("bsai_token_refreshed", onRefreshed);
+    window.addEventListener("bsai_session_expired", onExpired);
+    return () => {
+      window.removeEventListener("bsai_token_refreshed", onRefreshed);
+      window.removeEventListener("bsai_session_expired", onExpired);
+    };
+  }, []);
+
   // Auto-scroll chat
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -960,13 +980,11 @@ export default function App() {
     }
   };
 
-  // Fetch tab content
+  // Fetch tab content (uses authFetch for auto token refresh)
   useEffect(() => {
     if (!token) return;
     setContentLoading(true);
-    fetch(`${API_BASE}/api/documents?tab=${activeTab}&limit=50`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
+    authFetch(`${API_BASE}/api/documents?tab=${activeTab}&limit=50`)
       .then(r => {
         if (!r.ok) {
           console.error(`[BSW] Documents fetch failed: ${r.status} ${r.statusText}`);
@@ -990,8 +1008,8 @@ export default function App() {
     if (activeTab !== "learning" || !token) return;
     setLearningLoading(true);
     Promise.all([
-      fetch(`${API_BASE}/api/learning/guides`, { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json()),
-      fetch(`${API_BASE}/api/learning/quizzes`, { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json()),
+      authFetch(`${API_BASE}/api/learning/guides`).then(r => r.json()),
+      authFetch(`${API_BASE}/api/learning/quizzes`).then(r => r.json()),
     ]).then(([g, q]) => {
       setLearningGuides(g.guides || []);
       setLearningQuizzes(q.quizzes || []);
@@ -1004,9 +1022,7 @@ export default function App() {
     if (!searchQuery.trim() || !token) return;
     setSearchLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/api/search?q=${encodeURIComponent(searchQuery)}&tab=${activeTab}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await authFetch(`${API_BASE}/api/search?q=${encodeURIComponent(searchQuery)}&tab=${activeTab}`);
       const data = await res.json();
       setSearchResults(data.results || []);
     } catch {}
@@ -1027,28 +1043,11 @@ export default function App() {
     setMessages(prev => [...prev, assistantMessage]);
 
     try {
-      const res = await fetch(`${API_BASE}/api/agent/query`, {
+      const res = await authFetch(`${API_BASE}/api/agent/query`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message: text, sessionId, tabSlug: activeTab, language, voiceInput: !!overrideText }),
       });
-
-      // Handle auth errors — sign out if token expired
-      if (res.status === 401) {
-        localStorage.removeItem("bsai_token");
-        setToken(null);
-        setUser(null);
-        setMessages(prev => {
-          const updated = [...prev];
-          updated[updated.length - 1] = { role: "assistant", content: "Your session has expired. Please sign in again.", sources: [] };
-          return updated;
-        });
-        setIsLoading(false);
-        return;
-      }
 
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
@@ -1117,6 +1116,7 @@ export default function App() {
         setToken(data.token);
         setUser(data.user);
         localStorage.setItem("bsai_token", data.token);
+        if (data.refreshToken) localStorage.setItem("bsai_refresh", data.refreshToken);
       } else if (data.needsConfirmation) {
         setAuthError(data.message || "Account created. Please check your email to confirm, then sign in.");
         setLoginMode(true);
@@ -1134,9 +1134,7 @@ export default function App() {
   // Learning tab handlers
   const openGuide = async (slug) => {
     try {
-      const res = await fetch(`${API_BASE}/api/learning/guides/${slug}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await authFetch(`${API_BASE}/api/learning/guides/${slug}`);
       const data = await res.json();
       setActiveGuide(data.guide);
       setGuideHistory(["root"]);
@@ -1156,9 +1154,7 @@ export default function App() {
 
   const openQuiz = async (slug) => {
     try {
-      const res = await fetch(`${API_BASE}/api/learning/quizzes/${slug}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await authFetch(`${API_BASE}/api/learning/quizzes/${slug}`);
       const data = await res.json();
       setActiveQuiz(data.quiz);
       setQuizQuestions(data.questions || []);
@@ -1175,12 +1171,9 @@ export default function App() {
     if (!activeQuiz) return;
     setQuizSubmitting(true);
     try {
-      const res = await fetch(`${API_BASE}/api/learning/quizzes/${activeQuiz.id}/submit`, {
+      const res = await authFetch(`${API_BASE}/api/learning/quizzes/${activeQuiz.id}/submit`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ answers: quizAnswers }),
       });
       const data = await res.json();
@@ -1563,7 +1556,7 @@ export default function App() {
           </button>
 
           <button
-            onClick={() => { localStorage.removeItem("bsai_token"); setToken(null); setUser(null); }}
+            onClick={() => { localStorage.removeItem("bsai_token"); localStorage.removeItem("bsai_refresh"); setToken(null); setUser(null); }}
             style={{
               padding: "8px 16px", borderRadius: 10,
               border: `1px solid ${colors.border}`,
