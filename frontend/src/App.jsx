@@ -913,6 +913,7 @@ export default function App() {
   const [quizSubmitting, setQuizSubmitting] = useState(false);
   const [learningLoading, setLearningLoading] = useState(false);
   const [showResources, setShowResources] = useState(false);
+  const [showTerms, setShowTerms] = useState(false);
 
   const chatEndRef = useRef(null);
   const recognitionRef = useRef(null);
@@ -2660,20 +2661,38 @@ export default function App() {
 
       {/* Resources & Attribution Footer Bar */}
       <div id="resources-footer-bar" style={{
-        position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 900,
-        background: colors.surface, borderTop: `1px solid ${colors.border}`,
+        position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 9999,
+        background: `linear-gradient(180deg, ${colors.surface}, ${colors.background})`,
+        borderTop: `2px solid ${colors.accentPrimary}40`,
+        boxShadow: `0 -4px 20px rgba(0,0,0,0.4)`,
         transition: "all 0.3s ease",
       }}>
-        <button onClick={() => setShowResources(p => !p)} style={{
-          width: "100%", padding: "8px 16px", border: "none", background: "transparent",
-          color: colors.textSecondary, cursor: "pointer", display: "flex", alignItems: "center",
-          justifyContent: "center", gap: 8, fontSize: 12,
+        <div style={{
+          display: "flex", alignItems: "center", justifyContent: "center", gap: 12,
+          padding: "10px 16px",
         }}>
-          <span>{showResources ? "▼" : "▲"}</span>
-          <span>Resources & Attribution</span>
-          <span style={{ opacity: 0.5 }}>|</span>
-          <span>Terms of Use</span>
-        </button>
+          <button onClick={() => { setShowResources(p => !p); setShowTerms(false); }} style={{
+            padding: "6px 16px", border: `1px solid ${colors.border}`, borderRadius: 20,
+            background: showResources ? `${colors.accentPrimary}20` : "transparent",
+            color: showResources ? colors.accentPrimary : colors.textSecondary,
+            cursor: "pointer", display: "flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 600,
+            transition: "all 0.2s",
+          }}>
+            <span style={{ fontSize: 10 }}>{showResources ? "▼" : "▲"}</span>
+            Resources & Attribution
+          </button>
+          <button onClick={() => { setShowTerms(p => !p); setShowResources(false); }} style={{
+            padding: "6px 16px", border: `1px solid ${colors.border}`, borderRadius: 20,
+            background: showTerms ? `${colors.accentPrimary}20` : "transparent",
+            color: showTerms ? colors.accentPrimary : colors.textSecondary, fontSize: 12, fontWeight: 600,
+            cursor: "pointer", transition: "all 0.2s",
+            display: "flex", alignItems: "center", gap: 6,
+          }}>
+            <span style={{ fontSize: 10 }}>{showTerms ? "▼" : "▲"}</span>
+            Terms & Conditions
+          </button>
+          <span style={{ color: colors.textSecondary, fontSize: 10, opacity: 0.6 }}>Refinish AI / Ease AI Works</span>
+        </div>
 
         {showResources && (
           <div style={{
@@ -2737,6 +2756,44 @@ export default function App() {
                   © {new Date().getFullYear()} Refinish AI — Ease AI Works. All rights reserved. Powered by Anthropic Claude.
                 </p>
               </div>
+            </div>
+          </div>
+        )}
+
+        {showTerms && (
+          <div style={{
+            maxHeight: 380, overflowY: "auto", padding: "16px 24px 20px",
+            background: colors.background, borderTop: `1px solid ${colors.border}`,
+            fontSize: 12, lineHeight: 1.7, color: colors.textSecondary,
+          }}>
+            <div style={{ maxWidth: 900, margin: "0 auto" }}>
+              <p style={{ fontWeight: 700, color: colors.textPrimary, fontSize: 15, marginBottom: 12 }}>
+                Terms & Conditions of Use
+              </p>
+              <p style={{ fontWeight: 600, color: colors.accentPrimary, marginBottom: 4 }}>1. AI Disclaimer & Accuracy</p>
+              <p style={{ marginBottom: 12 }}>Body Shop Wiz ("the App") uses artificial intelligence. AI-generated responses may contain inaccuracies, hallucinations, or outdated information. All outputs are for informational purposes only and do not constitute professional advice. Users must independently verify all AI responses before making any repair, safety, or business decisions.</p>
+
+              <p style={{ fontWeight: 600, color: colors.accentPrimary, marginBottom: 4 }}>2. No Professional Advice</p>
+              <p style={{ marginBottom: 12 }}>The App does not replace certified technician training, OEM repair procedures, hands-on vehicle inspection, or qualified professional judgment. Always follow manufacturer guidelines, I-CAR standards, and local regulations.</p>
+
+              <p style={{ fontWeight: 600, color: colors.accentPrimary, marginBottom: 4 }}>3. Assumption of Risk</p>
+              <p style={{ marginBottom: 12 }}>By using this App, you acknowledge that automotive body repair and refinishing involves inherent risks including exposure to hazardous chemicals, physical injury, and property damage. You assume all risks associated with acting on information provided by the App.</p>
+
+              <p style={{ fontWeight: 600, color: colors.accentPrimary, marginBottom: 4 }}>4. Limitation of Liability</p>
+              <p style={{ marginBottom: 12 }}>Refinish AI, Ease AI Works, and their officers, directors, employees, and affiliates shall not be liable for any direct, indirect, incidental, special, consequential, or punitive damages arising from the use of or reliance on this App, including but not limited to: incorrect repairs, safety incidents, environmental violations, regulatory fines, property damage, or personal injury. Total aggregate liability shall not exceed the amount paid for access to the App in the preceding 12 months.</p>
+
+              <p style={{ fontWeight: 600, color: colors.accentPrimary, marginBottom: 4 }}>5. Indemnification</p>
+              <p style={{ marginBottom: 12 }}>You agree to indemnify and hold harmless Refinish AI and Ease AI Works from any claims, losses, damages, liabilities, and expenses (including attorneys' fees) arising from your use of the App or reliance on its outputs.</p>
+
+              <p style={{ fontWeight: 600, color: colors.accentPrimary, marginBottom: 4 }}>6. Data & Privacy</p>
+              <p style={{ marginBottom: 12 }}>Queries and interactions may be logged for quality improvement and knowledge gap analysis. No personally identifiable information is shared with third parties. Shop-specific documents uploaded to the App remain the property of the uploading party.</p>
+
+              <p style={{ fontWeight: 600, color: colors.accentPrimary, marginBottom: 4 }}>7. Acceptance</p>
+              <p style={{ marginBottom: 12 }}>By creating an account or using the App, you agree to these Terms & Conditions in their entirety. Refinish AI reserves the right to update these terms at any time. Continued use constitutes acceptance of updated terms.</p>
+
+              <p style={{ fontSize: 11, marginTop: 8, opacity: 0.7 }}>
+                © {new Date().getFullYear()} Refinish AI — Ease AI Works. All rights reserved. Contact: support@easeaiworks.com
+              </p>
             </div>
           </div>
         )}
