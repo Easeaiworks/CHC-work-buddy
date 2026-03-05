@@ -71,17 +71,26 @@ ingestRouter.post('/document', upload.single('file'), async (req, res) => {
       return null;
     });
 
+    // Normalize tab slug — "All Tabs" or empty means null
+    const normalizedTabSlug = (tabSlug && tabSlug !== '' && tabSlug !== '-- All Tabs --') ? tabSlug : null;
+
     // 2. Upload file to Supabase Storage
-    const filePath = `documents/${tabSlug || 'general'}/${Date.now()}-${originalname}`;
-    const { data: storageData, error: storageError } = await supabase.storage
-      .from('bodyshop-docs')
-      .upload(filePath, buffer, { contentType: mimetype });
+    const filePath = `documents/${normalizedTabSlug || 'general'}/${Date.now()}-${originalname}`;
+    let publicUrl = null;
+    try {
+      const { data: storageData, error: storageError } = await supabase.storage
+        .from('bodyshop-docs')
+        .upload(filePath, buffer, { contentType: mimetype });
 
-    if (storageError) throw storageError;
-
-    const { data: { publicUrl } } = supabase.storage
-      .from('bodyshop-docs')
-      .getPublicUrl(filePath);
+      if (storageError) {
+        logger.warn('Storage upload failed (continuing without file URL)', { error: storageError.message });
+      } else {
+        const { data } = supabase.storage.from('bodyshop-docs').getPublicUrl(filePath);
+        publicUrl = data?.publicUrl || null;
+      }
+    } catch (storageErr) {
+      logger.warn('Storage upload exception (continuing without file URL)', { error: storageErr.message });
+    }
 
     // 3. Wait for auto-tags and merge with manual input
     const autoTags = await autoTagPromise;
@@ -94,7 +103,7 @@ ingestRouter.post('/document', upload.single('file'), async (req, res) => {
         title,
         description: description || autoTags?.description || null,
         doc_type: docType || autoTags?.suggestedDocType || 'other',
-        tab_slug: tabSlug || autoTags?.suggestedTab || null,
+        tab_slug: normalizedTabSlug || autoTags?.suggestedTab || null,
         language: language || 'en',
         file_url: publicUrl,
         file_name: originalname,
@@ -136,8 +145,8 @@ ingestRouter.post('/document', upload.single('file'), async (req, res) => {
       });
 
   } catch (error) {
-    logger.error('Document ingest error', { error: error.message });
-    res.status(500).json({ error: 'Failed to process document', details: error.message });
+    logger.error('Document ingest error', { error: error.message, stack: error.stack });
+    res.status(500).json({ error: 'Failed to process document', details: error.message, hint: error.hint || error.code || null });
   }
 });
 
