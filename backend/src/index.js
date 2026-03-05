@@ -156,7 +156,14 @@ app.use('/api/auth', authRouter);
 // ─── Maintenance: one-time embedding backfill (no auth) ──────
 app.all('/api/maintenance/generate-embeddings', async (req, res) => {
   try {
-    const { generateEmbedding } = await import('./services/rag.js');
+    // Create a fresh OpenAI client directly (in case the global one is null)
+    const { default: OpenAI } = await import('openai');
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) {
+      return res.status(500).json({ error: 'OPENAI_API_KEY not set in environment variables' });
+    }
+    const freshOpenai = new OpenAI({ apiKey });
+
     const { data: chunks, error: fetchErr } = await supabase
       .from('document_chunks')
       .select('id, content')
@@ -171,25 +178,30 @@ app.all('/api/maintenance/generate-embeddings', async (req, res) => {
 
     logger.info(`Generating embeddings for ${chunks.length} chunks`);
     let successCount = 0;
-    const BATCH = 10;
+    let errors = [];
+    const BATCH = 5;
 
     for (let i = 0; i < chunks.length; i += BATCH) {
       const batch = chunks.slice(i, i + BATCH);
       const results = await Promise.all(
         batch.map(async (chunk) => {
           try {
-            const embedding = await generateEmbedding(chunk.content);
-            if (!embedding) return false;
+            const resp = await freshOpenai.embeddings.create({
+              model: 'text-embedding-3-small',
+              input: chunk.content.replace(/\n/g, ' ').trim().slice(0, 8000),
+            });
+            const embedding = resp.data[0].embedding;
             const { error } = await supabase.from('document_chunks').update({ embedding }).eq('id', chunk.id);
-            return !error;
-          } catch { return false; }
+            if (error) { errors.push(error.message); return false; }
+            return true;
+          } catch (e) { errors.push(e.message); return false; }
         })
       );
       successCount += results.filter(Boolean).length;
-      if (i + BATCH < chunks.length) await new Promise(r => setTimeout(r, 300));
+      if (i + BATCH < chunks.length) await new Promise(r => setTimeout(r, 500));
     }
 
-    res.json({ message: 'Done', processed: successCount, total: chunks.length });
+    res.json({ message: 'Done', processed: successCount, failed: chunks.length - successCount, total: chunks.length, errors: errors.slice(0, 5) });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
