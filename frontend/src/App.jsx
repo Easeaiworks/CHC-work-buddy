@@ -137,12 +137,45 @@ function MaxAvatar({ isSpeaking, isListening, language, onLanguageChange, theme 
           {/* Background */}
           <rect width="120" height="120" fill="#0f2040" rx="60" />
 
-          {/* Neck */}
-          <rect x="46" y="80" width="28" height="20" rx="6" fill="#c8956c" />
+          {/* Coveralls body — charcoal gray mechanic suit */}
+          <rect x="18" y="92" width="84" height="32" rx="8" fill="#3a3d42" />
+          {/* Coverall shoulders */}
+          <path d="M18 100 Q18 88 35 85 L46 85 L46 100Z" fill="#3a3d42" />
+          <path d="M102 100 Q102 88 85 85 L74 85 L74 100Z" fill="#3a3d42" />
+          {/* Coverall collar — folded down */}
+          <path d="M42 88 L38 96 L48 92Z" fill="#4a4e54" />
+          <path d="M78 88 L82 96 L72 92Z" fill="#4a4e54" />
+          {/* Lapel lines */}
+          <line x1="45" y1="89" x2="42" y2="100" stroke="#2d3035" strokeWidth="1.5" />
+          <line x1="75" y1="89" x2="78" y2="100" stroke="#2d3035" strokeWidth="1.5" />
+          {/* Center zipper line */}
+          <line x1="60" y1="92" x2="60" y2="120" stroke="#555960" strokeWidth="1.5" />
+          {/* Zipper pull */}
+          <rect x="58" y="93" width="4" height="5" rx="1" fill="#888d94" />
+          {/* Chest pocket — left */}
+          <rect x="35" y="98" width="14" height="10" rx="2" fill="none" stroke="#555960" strokeWidth="1" />
+          {/* Name patch on pocket */}
+          <rect x="36" y="99" width="12" height="4" rx="1" fill="#1e3a5f" />
+          <text x="42" y="102.5" textAnchor="middle" fill="white" fontSize="3" fontWeight="bold" fontFamily="sans-serif">MAX</text>
+          {/* Chest pocket — right */}
+          <rect x="71" y="98" width="14" height="10" rx="2" fill="none" stroke="#555960" strokeWidth="1" />
+          {/* Pen in right pocket */}
+          <line x1="76" y1="96" x2="76" y2="102" stroke="#e85d3a" strokeWidth="1.5" strokeLinecap="round" />
+          {/* Shoulder seam stitching */}
+          <path d="M35 87 Q44 84 46 87" stroke="#555960" strokeWidth="0.8" fill="none" strokeDasharray="2 1.5" />
+          <path d="M85 87 Q76 84 74 87" stroke="#555960" strokeWidth="0.8" fill="none" strokeDasharray="2 1.5" />
 
-          {/* Shirt/collar */}
-          <rect x="20" y="95" width="80" height="30" rx="8" fill="#1e3a5f" />
-          <polygon points="55,95 65,95 60,108" fill="white" opacity="0.9" />
+          {/* Neck / visible undershirt */}
+          <rect x="47" y="80" width="26" height="14" rx="6" fill="#c8956c" />
+          {/* Crew-neck t-shirt visible */}
+          <path d="M48 88 Q60 92 72 88 Q70 90 60 91 Q50 90 48 88Z" fill="#e8e8e8" />
+
+          {/* Hood gathered behind neck (paint suit hood down) */}
+          <path d="M36 86 Q38 80 46 82 L46 87 Q40 86 36 86Z" fill="#4a4e54" opacity="0.7" />
+          <path d="M84 86 Q82 80 74 82 L74 87 Q80 86 84 86Z" fill="#4a4e54" opacity="0.7" />
+          {/* Hood fabric folds */}
+          <path d="M38 84 Q42 81 46 83" stroke="#555960" strokeWidth="0.8" fill="none" />
+          <path d="M82 84 Q78 81 74 83" stroke="#555960" strokeWidth="0.8" fill="none" />
 
           {/* Head */}
           <ellipse cx="60" cy="55" rx="28" ry="30" fill="#c8956c" />
@@ -155,6 +188,11 @@ function MaxAvatar({ isSpeaking, isListening, language, onLanguageChange, theme 
           {/* Ears */}
           <ellipse cx="32" cy="55" rx="5" ry="7" fill="#b8845c" />
           <ellipse cx="88" cy="55" rx="5" ry="7" fill="#b8845c" />
+
+          {/* Safety glasses pushed up on forehead */}
+          <path d="M36 38 Q42 36 48 38" stroke="#66b2ff" strokeWidth="2" fill="none" opacity="0.6" />
+          <path d="M72 38 Q78 36 84 38" stroke="#66b2ff" strokeWidth="2" fill="none" opacity="0.6" />
+          <line x1="48" y1="38" x2="72" y2="38" stroke="#66b2ff" strokeWidth="1" opacity="0.4" />
 
           {/* Eyes */}
           <ellipse cx="48" cy="52" rx="8" ry={eyeBlink ? 1 : 6} fill="white" />
