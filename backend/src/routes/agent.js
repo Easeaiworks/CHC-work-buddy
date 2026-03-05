@@ -9,6 +9,16 @@ import { logger } from '../utils/logger.js';
 
 export const agentRouter = Router();
 
+// ─── Translation intent detection ─────────────────────────────
+const TRANSLATION_PATTERNS = [
+  /\b(translat|tradui|traduc|tradúc|en\s+español|en\s+français|in\s+spanish|in\s+french|au\s+français|al\s+español)\b/i,
+  /\b(dame\s+en\s+español|donnez[-\s]moi\s+en\s+français|convertir?\s+al?\s+(español|french|français|spanish))\b/i,
+];
+
+function hasTranslationIntent(message) {
+  return TRANSLATION_PATTERNS.some(p => p.test(message));
+}
+
 // ─── Video intent detection ───────────────────────────────────
 const VIDEO_INTENT_PATTERNS = [
   /\b(show\s+me|play|watch|video|videos|tutorial|how\s+to|demonstrate|demonstration|training\s+video|walkthrough|see\s+how|let\s+me\s+see)\b/i,
@@ -50,6 +60,7 @@ agentRouter.post('/query', async (req, res) => {
 
     const lang = language || await detectLanguage(message) || 'en';
     const wantsVideo = hasVideoIntent(message);
+    const wantsTranslation = hasTranslationIntent(message) || lang !== 'en';
     const videoSearchTerms = wantsVideo ? extractVideoSearchTerms(message) : null;
 
     // Run embedding search, keyword search (tab-filtered + cross-tab), and media search in parallel
@@ -177,9 +188,15 @@ agentRouter.post('/query', async (req, res) => {
         ).join('\n')}\n</available_videos>\nRelevant training videos have been found and will be shown to the user automatically. Briefly acknowledge them in your response.`
       : '';
 
+    // Translation hint — tell Max to translate the full document content
+    const langNames = { es: 'Spanish', fr: 'French', en: 'English' };
+    const translationHint = wantsTranslation && mergedChunks.length > 0
+      ? `\n\n<translation_instruction>The user speaks ${langNames[lang] || lang}. The documents in the context are in English. You MUST translate the FULL document content into ${langNames[lang] || lang}. Do not summarize — provide the complete translated text so the user can read or print it. Start with "📄 ${lang === 'es' ? 'Traducido de' : lang === 'fr' ? 'Traduit de' : 'Translated from'}: [document title]" then provide the full translation.</translation_instruction>`
+      : '';
+
     const messages = [
       ...conversationHistory,
-      { role: 'user', content: `${message}\n\n<context>\n${contextText}${videoHint}\n</context>` },
+      { role: 'user', content: `${message}\n\n<context>\n${contextText}${videoHint}${translationHint}\n</context>` },
     ];
 
     // Send video cards before text starts streaming
@@ -187,10 +204,13 @@ agentRouter.post('/query', async (req, res) => {
       res.write(`data: ${JSON.stringify({ type: 'media', media: mediaResults })}\n\n`);
     }
 
+    // Use higher token limit for translations (full document content)
+    const maxTokens = wantsTranslation ? 4096 : 1024;
+
     let fullResponse = '';
     const stream = anthropic.messages.stream({
       model: 'claude-sonnet-4-20250514',
-      max_tokens: 1024,
+      max_tokens: maxTokens,
       system: getSystemPrompt(lang, tabSlug),
       messages,
     });
