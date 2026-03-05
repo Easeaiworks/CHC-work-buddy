@@ -119,6 +119,36 @@ agentRouter.post('/query', async (req, res) => {
       }
     }
 
+    // ─── Direct ILIKE fallback ─────────────────────────────────
+    // If keyword RPC returned nothing, do a direct ILIKE search on documents table.
+    // This catches product codes (JC7200), model numbers, and exact title phrases
+    // that the RPC might miss (e.g. if the function doesn't exist in DB).
+    if (keywordResults.length === 0) {
+      try {
+        const words = message.toLowerCase().split(/\s+/).filter(w => w.length >= 2);
+        // Build OR clause: match any word in title or description
+        const orClauses = words.map(w => `title.ilike.%${w}%,description.ilike.%${w}%`).join(',');
+        const { data: directHits } = await supabase
+          .from('documents')
+          .select('id, title, description, doc_type, tab_slug, file_url')
+          .eq('is_active', true)
+          .or(orClauses)
+          .limit(8);
+
+        if (directHits && directHits.length > 0) {
+          logger.info('Direct ILIKE fallback found docs', { count: directHits.length, titles: directHits.map(d => d.title) });
+          for (const d of directHits) {
+            if (!kwSeen.has(d.id)) {
+              kwSeen.add(d.id);
+              keywordResults.push({ ...d, rank: 0.7 });
+            }
+          }
+        }
+      } catch (e) {
+        logger.warn('Direct ILIKE fallback failed', { err: e.message });
+      }
+    }
+
     logger.info('Search results', {
       query: message.slice(0, 80),
       tabSlug,
@@ -187,6 +217,59 @@ agentRouter.post('/query', async (req, res) => {
         allChunks.push(chunk);
       }
     }
+
+    // ─── Last resort: if NO chunks found at all, search chunks table directly ───
+    // This catches product codes, model numbers, and other specific terms that
+    // both vector and keyword search might miss
+    if (allChunks.length === 0) {
+      try {
+        const significantWords = message.toLowerCase().split(/\s+/).filter(w =>
+          w.length >= 2 && !['do', 'you', 'have', 'an', 'the', 'a', 'is', 'it', 'for', 'of', 'to', 'in', 'on', 'can', 'me', 'my', 'and', 'or', 'any', 'show', 'find', 'get', 'what', 'where', 'how', 'does', 'about'].includes(w)
+        );
+        if (significantWords.length > 0) {
+          const chunkOr = significantWords.map(w => `content.ilike.%${w}%`).join(',');
+          const { data: directChunks } = await supabase
+            .from('document_chunks')
+            .select('content, document_id, chunk_index')
+            .or(chunkOr)
+            .limit(6);
+
+          if (directChunks && directChunks.length > 0) {
+            // Fetch parent docs for these chunks
+            const parentIds = [...new Set(directChunks.map(c => c.document_id))];
+            const { data: parentDocs } = await supabase
+              .from('documents')
+              .select('id, title, doc_type, tab_slug, file_url')
+              .in('id', parentIds)
+              .eq('is_active', true);
+
+            const docMap = new Map((parentDocs || []).map(d => [d.id, d]));
+            for (const c of directChunks) {
+              const parent = docMap.get(c.document_id);
+              if (parent) {
+                const key = `${c.document_id}-${c.content?.slice(0, 50)}`;
+                if (!seen.has(key)) {
+                  seen.add(key);
+                  allChunks.push({
+                    content: c.content,
+                    document_id: c.document_id,
+                    title: parent.title,
+                    doc_type: parent.doc_type,
+                    tab_slug: parent.tab_slug,
+                    file_url: parent.file_url,
+                    similarity: 0.6,
+                  });
+                }
+              }
+            }
+            logger.info('Last-resort chunk search found results', { count: allChunks.length });
+          }
+        }
+      } catch (e) {
+        logger.warn('Last-resort chunk search failed', { err: e.message });
+      }
+    }
+
     // Replace relevantChunks reference for downstream use
     const mergedChunks = allChunks.slice(0, 10);
 
