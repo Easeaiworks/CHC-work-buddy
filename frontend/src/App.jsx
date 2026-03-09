@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { authFetch } from "./authFetch.js";
 
 // ─── API Base ────────────────────────────────────────────────
@@ -978,35 +978,155 @@ export default function App() {
     recognitionRef.current = recognition;
   }, [language]);
 
-  // TTS — prefer a natural male voice for Max
+  // TTS — locked-in middle-aged male voice for Max
+  // Pre-load voices on mount and cache the best match per language
+  const voiceCacheRef = useRef({});
+  const voicesLoadedRef = useRef(false);
+
+  // Known high-quality male voices per platform, ordered by preference
+  const PREFERRED_MALE_VOICES = useMemo(() => ({
+    en: [
+      "Microsoft David",    // Windows — natural male
+      "Microsoft Mark",     // Windows — natural male
+      "Daniel",             // macOS/iOS — natural male
+      "Aaron",              // macOS — natural male
+      "Google UK English Male", // Chrome
+      "Google US English",  // Chrome (often male)
+      "Fred",               // macOS fallback
+      "Alex",               // macOS older
+      "David",              // Cross-platform
+      "James",              // Various
+      "Thomas",             // Various
+      "Reed",               // macOS
+      "Evan",               // macOS
+      "Rishi",              // macOS
+      "Gordon",             // macOS
+    ],
+    fr: [
+      "Microsoft Paul",     // Windows French male
+      "Thomas",             // macOS French male
+      "Google français",    // Chrome
+      "Jacques",            // Various
+      "Daniel",             // Fallback
+    ],
+    es: [
+      "Microsoft Pablo",    // Windows Spanish male
+      "Jorge",              // macOS Spanish male
+      "Juan",               // Various
+      "Google español",     // Chrome
+      "Diego",              // Various
+    ],
+  }), []);
+
+  // Load and cache voices — Chrome fires onvoiceschanged async
+  useEffect(() => {
+    if (!("speechSynthesis" in window)) return;
+
+    const findBestVoice = (voices, lang) => {
+      const langPrefix = lang.slice(0, 2);
+      const preferred = PREFERRED_MALE_VOICES[langPrefix] || PREFERRED_MALE_VOICES.en;
+      const naturalTags = ["premium", "enhanced", "natural", "neural"];
+      const langVoices = voices.filter(v => v.lang.startsWith(langPrefix));
+
+      // Pass 1: Exact name match from preferred list (in order of preference)
+      for (const name of preferred) {
+        const match = langVoices.find(v => v.name.toLowerCase().includes(name.toLowerCase()));
+        if (match) return match;
+      }
+
+      // Pass 2: Any natural/premium voice in the language
+      const naturalVoice = langVoices.find(v => naturalTags.some(t => v.name.toLowerCase().includes(t)));
+      if (naturalVoice) return naturalVoice;
+
+      // Pass 3: First non-female voice in the language
+      const femaleNames = ["samantha", "victoria", "karen", "moira", "tessa", "fiona", "kate", "zira", "hazel", "susan", "female", "woman", "girl", "siri"];
+      const nonFemale = langVoices.find(v => !femaleNames.some(f => v.name.toLowerCase().includes(f)));
+      if (nonFemale) return nonFemale;
+
+      // Pass 4: Any voice in the language
+      return langVoices[0] || null;
+    };
+
+    const cacheVoices = () => {
+      const voices = window.speechSynthesis.getVoices();
+      if (!voices.length) return;
+      voicesLoadedRef.current = true;
+      voiceCacheRef.current = {
+        en: findBestVoice(voices, "en-US"),
+        fr: findBestVoice(voices, "fr-CA"),
+        es: findBestVoice(voices, "es-MX"),
+      };
+      // Store the voice names so user doesn't get a different one
+      try {
+        localStorage.setItem("max_voices", JSON.stringify({
+          en: voiceCacheRef.current.en?.name || "",
+          fr: voiceCacheRef.current.fr?.name || "",
+          es: voiceCacheRef.current.es?.name || "",
+        }));
+      } catch {}
+    };
+
+    // Try to restore cached voice names from localStorage
+    const restoreFromStorage = (voices) => {
+      try {
+        const saved = JSON.parse(localStorage.getItem("max_voices") || "{}");
+        let restored = false;
+        for (const lang of ["en", "fr", "es"]) {
+          if (saved[lang]) {
+            const match = voices.find(v => v.name === saved[lang]);
+            if (match) { voiceCacheRef.current[lang] = match; restored = true; }
+          }
+        }
+        return restored;
+      } catch { return false; }
+    };
+
+    // Initial load attempt
+    const voices = window.speechSynthesis.getVoices();
+    if (voices.length) {
+      if (!restoreFromStorage(voices)) cacheVoices();
+      else voicesLoadedRef.current = true;
+    }
+
+    // Chrome fires this event when voices are ready
+    window.speechSynthesis.onvoiceschanged = () => {
+      const v = window.speechSynthesis.getVoices();
+      if (v.length && !voicesLoadedRef.current) {
+        if (!restoreFromStorage(v)) cacheVoices();
+        else voicesLoadedRef.current = true;
+      }
+    };
+  }, [PREFERRED_MALE_VOICES]);
+
   const speak = useCallback((text) => {
     if (!("speechSynthesis" in window)) return;
     window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(text.slice(0, 500));
-    utterance.lang = language === "fr" ? "fr-CA" : language === "es" ? "es-MX" : "en-US";
-    utterance.rate = 0.95;
-    utterance.pitch = 0.9;
+    const langCode = language === "fr" ? "fr-CA" : language === "es" ? "es-MX" : "en-US";
+    const langPrefix = langCode.slice(0, 2);
+    utterance.lang = langCode;
+    utterance.rate = 0.92;   // Slightly slower — mature, authoritative
+    utterance.pitch = 0.85;  // Lower pitch — middle-aged male
 
-    // Find a male voice — prefer natural/enhanced voices
-    const voices = window.speechSynthesis.getVoices();
-    const langPrefix = utterance.lang.slice(0, 2);
-    const maleKeywords = ["daniel", "james", "aaron", "david", "gordon", "male", "guy", "tom", "alex", "fred", "rishi", "jorge", "thomas", "reed", "evan"];
-    const naturalKeywords = ["premium", "enhanced", "natural", "neural"];
-
-    // Priority 1: Natural/premium male voice
-    let voice = voices.find(v => v.lang.startsWith(langPrefix) && maleKeywords.some(k => v.name.toLowerCase().includes(k)) && naturalKeywords.some(k => v.name.toLowerCase().includes(k)));
-    // Priority 2: Any male voice in the right language
-    if (!voice) voice = voices.find(v => v.lang.startsWith(langPrefix) && maleKeywords.some(k => v.name.toLowerCase().includes(k)));
-    // Priority 3: Any voice with "male" in name
-    if (!voice) voice = voices.find(v => maleKeywords.some(k => v.name.toLowerCase().includes(k)));
-
-    if (voice) utterance.voice = voice;
+    // Use cached voice — already locked in
+    const cachedVoice = voiceCacheRef.current[langPrefix];
+    if (cachedVoice) {
+      utterance.voice = cachedVoice;
+    } else {
+      // Emergency fallback — voices not loaded yet, try once more
+      const voices = window.speechSynthesis.getVoices();
+      const preferred = PREFERRED_MALE_VOICES[langPrefix] || PREFERRED_MALE_VOICES.en;
+      for (const name of preferred) {
+        const match = voices.find(v => v.name.toLowerCase().includes(name.toLowerCase()) && v.lang.startsWith(langPrefix));
+        if (match) { utterance.voice = match; voiceCacheRef.current[langPrefix] = match; break; }
+      }
+    }
 
     utterance.onstart = () => setIsSpeaking(true);
     utterance.onend = () => setIsSpeaking(false);
     utterance.onerror = () => setIsSpeaking(false);
     window.speechSynthesis.speak(utterance);
-  }, [language]);
+  }, [language, PREFERRED_MALE_VOICES]);
 
   const toggleListening = () => {
     if (isListening) {
