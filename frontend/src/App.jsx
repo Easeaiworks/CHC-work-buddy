@@ -1134,9 +1134,41 @@ export default function App() {
     };
   }, [PREFERRED_MALE_VOICES]);
 
-  // Extract a short spoken summary — first 1-2 sentences, max ~120 chars
+  // Clean text for natural speech — strip markdown, symbols, URLs, formatting
+  const cleanForSpeech = useCallback((text) => {
+    let s = text;
+    // Remove emoji (unicode ranges + common text emoji)
+    s = s.replace(/[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{FE00}-\u{FE0F}\u{1FA00}-\u{1FA9F}]/gu, "");
+    // Remove markdown bold/italic: **text** → text, *text* → text, __text__ → text
+    s = s.replace(/\*{1,3}([^*]+)\*{1,3}/g, "$1");
+    s = s.replace(/_{1,2}([^_]+)_{1,2}/g, "$1");
+    // Remove markdown headers: ### Title → Title
+    s = s.replace(/^#{1,6}\s+/gm, "");
+    // Remove markdown links: [text](url) → text
+    s = s.replace(/\[([^\]]+)\]\([^)]+\)/g, "$1");
+    // Remove bare URLs
+    s = s.replace(/https?:\/\/[^\s)]+/g, "");
+    // Remove markdown bullet markers: - item, * item, • item
+    s = s.replace(/^[\s]*[-*•]\s+/gm, "");
+    // Remove numbered list markers: 1. item, 2) item
+    s = s.replace(/^[\s]*\d+[.)]\s+/gm, "");
+    // Remove code blocks and inline code
+    s = s.replace(/```[\s\S]*?```/g, "");
+    s = s.replace(/`([^`]+)`/g, "$1");
+    // Remove special characters that get vocalized weirdly
+    s = s.replace(/[~|<>{}[\]\\/#@^&=+]/g, " ");
+    // Remove repeated punctuation (!!!, ???, ...)
+    s = s.replace(/([!?.]){2,}/g, "$1");
+    // Remove "Sources:" section and everything after it
+    s = s.replace(/sources?\s*[:—-][\s\S]*/i, "");
+    // Collapse multiple spaces/newlines into single space
+    s = s.replace(/\s+/g, " ");
+    return s.trim();
+  }, []);
+
+  // Extract a short spoken summary — first 1-2 sentences, max ~150 chars
   const getShortSummary = useCallback((text) => {
-    const clean = text.replace(/[⚠️📎🎨🔍✅📊📋📄]/g, "").replace(/\*\*/g, "").trim();
+    const clean = cleanForSpeech(text);
     // Split on sentence endings
     const sentences = clean.split(/(?<=[.!?])\s+/);
     let summary = sentences[0] || clean.slice(0, 120);
@@ -1149,13 +1181,13 @@ export default function App() {
       summary = summary.slice(0, 147) + "...";
     }
     return summary;
-  }, []);
+  }, [cleanForSpeech]);
 
   const speak = useCallback((text, { fullRead = false } = {}) => {
     if (!("speechSynthesis" in window)) return;
     window.speechSynthesis.cancel();
 
-    const clean = text.replace(/[⚠️📎🎨🔍✅📊📋📄]/g, "").replace(/\*\*/g, "").trim();
+    const clean = cleanForSpeech(text);
     // Short mode: just the summary. Full mode: up to 2000 chars.
     const toSpeak = fullRead ? clean.slice(0, 2000) : getShortSummary(clean);
 
