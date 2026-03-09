@@ -673,11 +673,14 @@ function ChatMessage({ message, isUser, onPlayVideo, onOpenDoc, theme = "dark", 
 }
 
 // ─── Document Viewer ──────────────────────────────────────────
-function DocViewer({ doc, onClose, token, theme = "dark" }) {
+function DocViewer({ doc, onClose, token, theme = "dark", language = "en" }) {
   const colors = themes[theme];
   const [content, setContent] = useState(null);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState(null);
+  const [scriptLoading, setScriptLoading] = useState(false);
+  const [videoScript, setVideoScript] = useState(null);
+  const [showScript, setShowScript] = useState(false);
 
   useEffect(() => {
     if (!doc?.id) { setLoading(false); return; }
@@ -832,16 +835,112 @@ function DocViewer({ doc, onClose, token, theme = "dark" }) {
           )}
         </div>
 
+        {/* Video Script Panel */}
+        {showScript && videoScript && (
+          <div style={{
+            padding: "16px 24px",
+            borderTop: `1px solid ${colors.border}`,
+            maxHeight: "40vh",
+            overflow: "auto",
+            background: `${colors.background}`,
+          }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+              <div style={{ color: colors.accentSecondary, fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1 }}>
+                Video Script — {videoScript.metadata?.sceneCount} scenes, {videoScript.metadata?.estimatedDuration}
+              </div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(videoScript.script);
+                    const btn = document.getElementById("copy-script-btn");
+                    if (btn) { btn.textContent = "Copied!"; setTimeout(() => btn.textContent = "Copy Script", 1500); }
+                  }}
+                  id="copy-script-btn"
+                  style={{
+                    background: `${colors.accentPrimary}15`, color: colors.accentPrimary,
+                    border: `1px solid ${colors.accentPrimary}30`, borderRadius: 8,
+                    padding: "4px 12px", fontSize: 11, fontWeight: 600, cursor: "pointer",
+                  }}
+                >Copy Script</button>
+                <button
+                  onClick={() => setShowScript(false)}
+                  style={{
+                    background: `${colors.textSecondary}15`, color: colors.textSecondary,
+                    border: `1px solid ${colors.textSecondary}30`, borderRadius: 8,
+                    padding: "4px 12px", fontSize: 11, fontWeight: 600, cursor: "pointer",
+                  }}
+                >Hide</button>
+              </div>
+            </div>
+            <pre style={{
+              color: colors.textPrimary,
+              fontSize: 12,
+              lineHeight: 1.7,
+              whiteSpace: "pre-wrap",
+              fontFamily: "'Barlow', monospace",
+              background: `${colors.surface}`,
+              padding: 16,
+              borderRadius: 10,
+              border: `1px solid ${colors.border}`,
+            }}>{videoScript.script}</pre>
+          </div>
+        )}
+
         {/* Footer */}
-        {doc.file_url && content && (
-          <div style={{ padding: "12px 24px", borderTop: `1px solid ${colors.border}`, flexShrink: 0 }}>
+        <div style={{ padding: "12px 24px", borderTop: `1px solid ${colors.border}`, flexShrink: 0, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+            {/* Generate Video Script button */}
+            <button
+              onClick={async () => {
+                if (videoScript) { setShowScript(!showScript); return; }
+                setScriptLoading(true);
+                try {
+                  const res = await authFetch(`${API_BASE}/api/video-scripts/generate/${doc.id}`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ language }),
+                  });
+                  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                  const data = await res.json();
+                  setVideoScript(data);
+                  setShowScript(true);
+                } catch (err) {
+                  console.error("Script generation error:", err);
+                } finally {
+                  setScriptLoading(false);
+                }
+              }}
+              disabled={scriptLoading}
+              style={{
+                background: scriptLoading ? `${colors.textSecondary}15` : `${colors.accentSecondary}15`,
+                color: scriptLoading ? colors.textSecondary : colors.accentSecondary,
+                border: `1px solid ${scriptLoading ? colors.textSecondary + "30" : colors.accentSecondary + "30"}`,
+                borderRadius: 8,
+                padding: "6px 14px", fontSize: 11, fontWeight: 600,
+                cursor: scriptLoading ? "wait" : "pointer",
+                display: "flex", alignItems: "center", gap: 6,
+                transition: "all 0.2s ease",
+              }}
+              onMouseEnter={e => { if (!scriptLoading) e.currentTarget.style.background = `${colors.accentSecondary}25`; }}
+              onMouseLeave={e => { if (!scriptLoading) e.currentTarget.style.background = `${colors.accentSecondary}15`; }}
+            >
+              {scriptLoading ? (
+                <><span style={{ animation: "pulse 1s ease-in-out infinite" }}>Generating...</span></>
+              ) : videoScript ? (
+                <>{showScript ? "Hide Script" : "Show Script"}</>
+              ) : (
+                <>🎬 Generate Video Script</>
+              )}
+            </button>
+          </div>
+          {doc.file_url && (
             <a href={doc.file_url} target="_blank" rel="noreferrer" style={{
               color: colors.accentPrimary, fontSize: 12, textDecoration: "none", fontWeight: 500,
             }}>
               Open original file ↗
             </a>
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </div>
   );
@@ -2872,7 +2971,7 @@ export default function App() {
       </div>
 
       {/* Document Viewer Modal */}
-      {docViewer && <DocViewer doc={docViewer} onClose={() => setDocViewer(null)} token={token} theme={theme} />}
+      {docViewer && <DocViewer doc={docViewer} onClose={() => setDocViewer(null)} token={token} theme={theme} language={language} />}
 
       {/* Media Viewer Modal */}
       {mediaViewer && <MediaViewer item={mediaViewer} onClose={() => setMediaViewer(null)} theme={theme} />}

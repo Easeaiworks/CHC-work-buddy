@@ -19,6 +19,7 @@ import { ingestRouter } from './routes/ingest.js';
 import { authRouter } from './routes/auth.js';
 import { usersRouter } from './routes/users.js';
 import { learningRouter } from './routes/learning.js';
+import { videoScriptsRouter } from './routes/video-scripts.js';
 import { authMiddleware } from './middleware/auth.js';
 import { auditMiddleware } from './middleware/audit.js';
 import { logger } from './utils/logger.js';
@@ -321,6 +322,7 @@ app.use('/api/search', authMiddleware, searchRouter);
 app.use('/api/ingest', authMiddleware, ingestRouter);
 app.use('/api/auth/users', authMiddleware, usersRouter);
 app.use('/api/learning', authMiddleware, learningRouter);
+app.use('/api/video-scripts', authMiddleware, videoScriptsRouter);
 
 // ─── Query Logs / Knowledge Gap Report (admin only) ──────────
 app.get('/api/query-logs', authMiddleware, async (req, res) => {
