@@ -510,7 +510,7 @@ function VideoResultsRow({ media, onPlay, theme = "dark" }) {
 }
 
 // ─── Chat Message ─────────────────────────────────────────────
-function ChatMessage({ message, isUser, onPlayVideo, onOpenDoc, theme = "dark" }) {
+function ChatMessage({ message, isUser, onPlayVideo, onOpenDoc, theme = "dark", onSpeak, onStopSpeaking, isSpeaking }) {
   const colors = themes[theme];
   return (
     <div style={{
@@ -629,6 +629,42 @@ function ChatMessage({ message, isUser, onPlayVideo, onOpenDoc, theme = "dark" }
                 <span style={{ color: colors.accentPrimary, fontSize: 16, flexShrink: 0, opacity: 0.6 }}>→</span>
               </div>
             ))}
+          </div>
+        )}
+        {/* TTS controls — Read Full Answer / Stop */}
+        {!isUser && message.content && message.content.length > 80 && onSpeak && (
+          <div style={{ marginTop: 10, paddingTop: 8, borderTop: `1px solid ${colors.border}`, display: "flex", gap: 8 }}>
+            {isSpeaking ? (
+              <button
+                onClick={() => onStopSpeaking && onStopSpeaking()}
+                style={{
+                  background: "rgba(239,68,68,0.15)", color: "#ef4444",
+                  border: "1px solid rgba(239,68,68,0.3)", borderRadius: 8,
+                  padding: "5px 12px", fontSize: 11, fontWeight: 600,
+                  cursor: "pointer", display: "flex", alignItems: "center", gap: 5,
+                  transition: "all 0.2s ease",
+                }}
+                onMouseEnter={e => e.currentTarget.style.background = "rgba(239,68,68,0.25)"}
+                onMouseLeave={e => e.currentTarget.style.background = "rgba(239,68,68,0.15)"}
+              >
+                ■ Stop Reading
+              </button>
+            ) : (
+              <button
+                onClick={() => onSpeak(message.content, { fullRead: true })}
+                style={{
+                  background: `${colors.accentSecondary}15`, color: colors.accentSecondary,
+                  border: `1px solid ${colors.accentSecondary}30`, borderRadius: 8,
+                  padding: "5px 12px", fontSize: 11, fontWeight: 600,
+                  cursor: "pointer", display: "flex", alignItems: "center", gap: 5,
+                  transition: "all 0.2s ease",
+                }}
+                onMouseEnter={e => e.currentTarget.style.background = `${colors.accentSecondary}25`}
+                onMouseLeave={e => e.currentTarget.style.background = `${colors.accentSecondary}15`}
+              >
+                🔊 Read Full Answer
+              </button>
+            )}
           </div>
         )}
       </div>
@@ -1098,10 +1134,32 @@ export default function App() {
     };
   }, [PREFERRED_MALE_VOICES]);
 
-  const speak = useCallback((text) => {
+  // Extract a short spoken summary — first 1-2 sentences, max ~120 chars
+  const getShortSummary = useCallback((text) => {
+    const clean = text.replace(/[⚠️📎🎨🔍✅📊📋📄]/g, "").replace(/\*\*/g, "").trim();
+    // Split on sentence endings
+    const sentences = clean.split(/(?<=[.!?])\s+/);
+    let summary = sentences[0] || clean.slice(0, 120);
+    // If first sentence is very short, grab a second
+    if (summary.length < 60 && sentences[1]) {
+      summary += " " + sentences[1];
+    }
+    // Cap at ~150 chars for a quick read
+    if (summary.length > 150) {
+      summary = summary.slice(0, 147) + "...";
+    }
+    return summary;
+  }, []);
+
+  const speak = useCallback((text, { fullRead = false } = {}) => {
     if (!("speechSynthesis" in window)) return;
     window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(text.slice(0, 500));
+
+    const clean = text.replace(/[⚠️📎🎨🔍✅📊📋📄]/g, "").replace(/\*\*/g, "").trim();
+    // Short mode: just the summary. Full mode: up to 2000 chars.
+    const toSpeak = fullRead ? clean.slice(0, 2000) : getShortSummary(clean);
+
+    const utterance = new SpeechSynthesisUtterance(toSpeak);
     const langCode = language === "fr" ? "fr-CA" : language === "es" ? "es-MX" : "en-US";
     const langPrefix = langCode.slice(0, 2);
     utterance.lang = langCode;
@@ -1126,7 +1184,12 @@ export default function App() {
     utterance.onend = () => setIsSpeaking(false);
     utterance.onerror = () => setIsSpeaking(false);
     window.speechSynthesis.speak(utterance);
-  }, [language, PREFERRED_MALE_VOICES]);
+  }, [language, PREFERRED_MALE_VOICES, getShortSummary]);
+
+  const stopSpeaking = useCallback(() => {
+    if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+    setIsSpeaking(false);
+  }, []);
 
   const toggleListening = () => {
     if (isListening) {
@@ -1257,7 +1320,7 @@ export default function App() {
                 updated[updated.length - 1] = { ...updated[updated.length - 1], content: fullText, media: mediaResults, sources, answerSource: data.answerSource || "unknown" };
                 return updated;
               });
-              speak(fullText.replace(/[⚠️📎🎨]/g, "").slice(0, 400));
+              speak(fullText); // Auto-speaks short summary only
             }
           } catch {}
         }
@@ -2673,7 +2736,7 @@ export default function App() {
             <div style={{ flex: 1, overflow: "auto", padding: 16, display: "flex", flexDirection: "column", gap: 4 }}>
               {messages.map((msg, i) => (
                 <div key={i} style={{ animation: "fadeIn 0.3s ease" }}>
-                  <ChatMessage message={msg} isUser={msg.role === "user"} onPlayVideo={setMediaViewer} onOpenDoc={setDocViewer} theme={theme} />
+                  <ChatMessage message={msg} isUser={msg.role === "user"} onPlayVideo={setMediaViewer} onOpenDoc={setDocViewer} theme={theme} onSpeak={speak} onStopSpeaking={stopSpeaking} isSpeaking={isSpeaking} />
                 </div>
               ))}
               {isLoading && (
