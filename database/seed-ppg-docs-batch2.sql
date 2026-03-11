@@ -6369,6 +6369,7 @@ PPG Certification - Envirobase Training 4/2018
 
 
 -- Document: PD-0300 Masking
+-- NOTE: This 126-page PDF failed text extraction. Inserting with placeholder content.
 WITH new_doc AS (
   INSERT INTO public.documents (title, description, doc_type, tab_slug, tags, metadata, is_active)
   VALUES (
@@ -6386,6 +6387,7 @@ INSERT INTO public.document_chunks (document_id, chunk_index, content)
 SELECT id, chunk_idx, chunk_content
 FROM new_doc
 CROSS JOIN (VALUES
+  (0, 'PD-0300 Masking - Comprehensive masking procedures for PPG refinish systems. This document covers masking techniques, materials, and best practices to protect non-paint areas during application. Full content pending re-extraction from 126-page source PDF.')
 ) AS chunks(chunk_idx, chunk_content);
 
 
