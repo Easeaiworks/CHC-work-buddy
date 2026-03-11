@@ -1033,6 +1033,7 @@ export default function App() {
   const [authForm, setAuthForm] = useState({ email: "", password: "" });
   const [authError, setAuthError] = useState("");
   const [theme, setTheme] = useState(localStorage.getItem("bsai_theme") || "dark");
+  const [paintSection, setPaintSection] = useState(null); // process section filter for painting tab
 
   // Learning tab state
   const [learningView, setLearningView] = useState("menu");
@@ -1338,7 +1339,7 @@ export default function App() {
   useEffect(() => {
     if (!token) return;
     setContentLoading(true);
-    authFetch(`${API_BASE}/api/documents?tab=${activeTab}&limit=50`)
+    authFetch(`${API_BASE}/api/documents?tab=${activeTab}&limit=${activeTab === 'painting' ? 200 : 50}`)
       .then(r => {
         if (!r.ok) {
           console.error(`[BSW] Documents fetch failed: ${r.status} ${r.statusText}`);
@@ -1573,7 +1574,28 @@ export default function App() {
 
   const currentTab = TABS.find(t => t.slug === activeTab);
   const docs = tabContent[activeTab] || [];
-  const displayResults = searchQuery && searchResults.length > 0 ? searchResults : docs;
+  const filteredDocs = (activeTab === "painting" && paintSection)
+    ? docs.filter(d => d.metadata?.process_section === paintSection)
+    : docs;
+  const displayResults = searchQuery && searchResults.length > 0 ? searchResults : filteredDocs;
+
+  // Process sections for Paint tab filter
+  const PAINT_SECTIONS = [
+    { key: "repair-process", label: "Repair Process" },
+    { key: "cleaning", label: "Cleaning" },
+    { key: "pre-paint-considerations", label: "Pre-Paint" },
+    { key: "masking", label: "Masking" },
+    { key: "surface-prep", label: "Surface Prep" },
+    { key: "equipment-and-tools", label: "Equipment & Tools" },
+    { key: "primer-application", label: "Primers" },
+    { key: "surfacer-application", label: "Surfacers" },
+    { key: "sealer-application", label: "Sealers" },
+    { key: "basecoats-and-tricoats", label: "Basecoats & Tricoats" },
+    { key: "blending", label: "Blending" },
+    { key: "clearcoat-application", label: "Clearcoats" },
+    { key: "unique-finishes", label: "Unique Finishes" },
+    { key: "finished-paint-procedures", label: "Finished Paint" },
+  ];
 
   // ─── Login Screen ─────────────────────────────────────────
   if (!token) {
@@ -1984,7 +2006,7 @@ export default function App() {
             <button
               key={tab.slug}
               className="tab-btn"
-              onClick={() => { setActiveTab(tab.slug); setSearchResults([]); setSearchQuery(""); }}
+              onClick={() => { setActiveTab(tab.slug); setSearchResults([]); setSearchQuery(""); setPaintSection(null); }}
               style={{
                 flex: "1 1 0",
                 minWidth: 160,
@@ -2799,7 +2821,62 @@ export default function App() {
               <div style={{ fontSize: 24, marginBottom: 12 }}>⏳</div>
               Loading resources...
             </div>
-          ) : displayResults.length === 0 ? (
+          ) : (
+            <>
+            {/* Paint Process Section Filter */}
+            {activeTab === "painting" && !searchQuery && (
+              <div style={{
+                display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 16,
+                paddingBottom: 16, borderBottom: `1px solid ${colors.border}`,
+              }}>
+                <button
+                  onClick={() => setPaintSection(null)}
+                  style={{
+                    padding: "6px 14px", borderRadius: 20, fontSize: 12, fontWeight: 600,
+                    border: `1px solid ${!paintSection ? colors.accentPrimary : colors.border}`,
+                    background: !paintSection ? colors.accentPrimary : "transparent",
+                    color: !paintSection ? "white" : colors.textSecondary,
+                    cursor: "pointer", transition: "all 0.2s",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  All ({docs.length})
+                </button>
+                {PAINT_SECTIONS.map(s => {
+                  const count = docs.filter(d => d.metadata?.process_section === s.key).length;
+                  if (count === 0) return null;
+                  return (
+                    <button
+                      key={s.key}
+                      onClick={() => setPaintSection(paintSection === s.key ? null : s.key)}
+                      style={{
+                        padding: "6px 14px", borderRadius: 20, fontSize: 12, fontWeight: 600,
+                        border: `1px solid ${paintSection === s.key ? colors.accentPrimary : colors.border}`,
+                        background: paintSection === s.key ? colors.accentPrimary : "transparent",
+                        color: paintSection === s.key ? "white" : colors.textSecondary,
+                        cursor: "pointer", transition: "all 0.2s",
+                        whiteSpace: "nowrap",
+                      }}
+                      onMouseEnter={(e) => {
+                        if (paintSection !== s.key) {
+                          e.target.style.borderColor = colors.accentPrimary;
+                          e.target.style.color = colors.accentPrimary;
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                        if (paintSection !== s.key) {
+                          e.target.style.borderColor = colors.border;
+                          e.target.style.color = colors.textSecondary;
+                        }
+                      }}
+                    >
+                      {s.label} ({count})
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+            {displayResults.length === 0 ? (
             <div style={{
               color: colors.textSecondary, fontSize: 14, padding: 60, textAlign: "center",
               border: `2px dashed ${colors.border}`, borderRadius: 16,
@@ -2822,6 +2899,8 @@ export default function App() {
                 </div>
               ))}
             </div>
+          )}
+          </>
           )}
         </main>
 
