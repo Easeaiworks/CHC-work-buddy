@@ -1428,13 +1428,25 @@ export default function App() {
 
   // Core: fetch audio from backend TTS endpoint (cached on server), fallback to browser voice
   const playCloudTTS = useCallback(async (text, { onStart, onEnd, onError } = {}) => {
+    // Guard: once cloud audio starts playing, never fire browser fallback
+    let cloudPlaying = false;
+    let fallbackFired = false;
+
+    const doFallback = () => {
+      if (cloudPlaying || fallbackFired) return; // cloud audio already working, skip fallback
+      fallbackFired = true;
+      console.warn("[TTS] Falling back to browser TTS");
+      speakBrowserFallback(text, { onStart, onEnd, onError });
+    };
+
     try {
-      // Stop any currently playing audio
+      // Stop any currently playing audio AND any lingering browser speech
       if (ttsAudioRef.current) {
         try { ttsAudioRef.current.pause(); } catch(e) {}
         ttsAudioRef.current.src = "";
         ttsAudioRef.current = null;
       }
+      if ("speechSynthesis" in window) window.speechSynthesis.cancel();
 
       console.log("[TTS] Requesting cloud TTS — lang:", language, "text length:", text.length);
 
@@ -1465,21 +1477,24 @@ export default function App() {
       ttsAudioRef.current = audio;
 
       audio.onplay = () => {
-        console.log("[TTS] Audio playing");
+        cloudPlaying = true;
+        console.log("[TTS] Cloud audio playing");
+        // Kill any browser TTS that may have started
+        if ("speechSynthesis" in window) window.speechSynthesis.cancel();
         onStart?.();
       };
       audio.onended = () => {
-        console.log("[TTS] Audio ended");
+        console.log("[TTS] Cloud audio ended");
         URL.revokeObjectURL(url);
         ttsAudioRef.current = null;
         onEnd?.();
       };
       audio.onerror = (e) => {
-        console.error("[TTS] Audio playback error:", e?.target?.error?.message || e);
+        if (cloudPlaying) return; // already played fine, ignore late errors
+        console.error("[TTS] Audio element error:", e?.target?.error?.message || e);
         URL.revokeObjectURL(url);
         ttsAudioRef.current = null;
-        console.warn("[TTS] Falling back to browser TTS");
-        speakBrowserFallback(text, { onStart, onEnd, onError });
+        doFallback();
       };
 
       // Use play() with catch for autoplay policy
@@ -1488,15 +1503,14 @@ export default function App() {
         console.log("[TTS] play() succeeded");
       } catch (playErr) {
         console.warn("[TTS] play() blocked (autoplay policy):", playErr.message);
-        // Autoplay was blocked — fall back to browser TTS which is often allowed after user gesture
         URL.revokeObjectURL(url);
         ttsAudioRef.current = null;
-        speakBrowserFallback(text, { onStart, onEnd, onError });
+        doFallback();
       }
     } catch (err) {
-      console.warn("[TTS] Cloud TTS error, falling back to browser voice:", err.message);
+      console.warn("[TTS] Cloud TTS error:", err.message);
       ttsAudioRef.current = null;
-      speakBrowserFallback(text, { onStart, onEnd, onError });
+      doFallback();
     }
   }, [language, speakBrowserFallback]);
 
