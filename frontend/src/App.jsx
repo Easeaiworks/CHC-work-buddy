@@ -611,6 +611,26 @@ function ChatMessage({ message, isUser, onPlayVideo, onOpenDoc, theme = "dark", 
           ? `0 4px 16px ${colors.accentSecondary}20`
           : `inset 1px 1px 0 ${colors.border}, 0 4px 12px rgba(0,0,0,0.08)`,
       }}>
+        {/* Continue Reading Banner — shown at TOP of message so it's always visible */}
+        {awaitingContinue && (
+          <div
+            onClick={() => onContinueReading && onContinueReading()}
+            style={{
+              display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+              padding: "10px 16px", marginBottom: 10, borderRadius: 12,
+              background: "linear-gradient(135deg, rgba(34,197,94,0.2), rgba(34,197,94,0.08))",
+              border: "1.5px solid rgba(34,197,94,0.4)",
+              cursor: "pointer",
+              animation: "pulseGlow 1.5s ease-in-out infinite",
+              boxShadow: "0 4px 16px rgba(34,197,94,0.25)",
+            }}
+          >
+            <span style={{ fontSize: 20 }}>🎙️</span>
+            <span style={{ color: "#22c55e", fontSize: 13, fontWeight: 700 }}>
+              Say "YES" or tap here to hear full answer
+            </span>
+          </div>
+        )}
         {/* Answer Source Badge — clickable */}
         {!isUser && message.answerSource && (
           <div
@@ -730,25 +750,8 @@ function ChatMessage({ message, isUser, onPlayVideo, onOpenDoc, theme = "dark", 
       {/* Shop-friendly TTS controls — large buttons for dirty/gloved hands */}
       {!isUser && message.content && message.content.length > 80 && onSpeak && (
         <div style={{ alignSelf: "flex-end", marginLeft: 4, marginBottom: 4, zIndex: 2, display: "flex", flexDirection: "column", gap: 6 }}>
-          {/* Listening/Awaiting Continue — large pulsing "Yes / Read it" button */}
-          {awaitingContinue ? (
-            <button
-              onClick={() => onContinueReading && onContinueReading()}
-              title="Read full answer"
-              style={{
-                background: "linear-gradient(135deg, #22c55e, #16a34a)", color: "white",
-                border: "none", borderRadius: 28,
-                width: 56, height: 56, fontSize: 11, fontWeight: 700,
-                cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-                boxShadow: "0 4px 20px rgba(34,197,94,0.5)",
-                animation: "pulseGlow 1.5s ease-in-out infinite",
-                lineHeight: 1.2, letterSpacing: 0.3,
-              }}
-            >
-              <span style={{ fontSize: 18, marginBottom: 1 }}>🎙️</span>
-              <span style={{ fontSize: 8 }}>Say YES</span>
-            </button>
-          ) : isSpeaking ? (
+          {/* Speaking / Read controls */}
+          {isSpeaking ? (
             <button
               onClick={() => onStopSpeaking && onStopSpeaking()}
               title="Stop reading"
