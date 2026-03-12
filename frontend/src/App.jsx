@@ -1632,17 +1632,39 @@ export default function App() {
     try { continueListenerRef.current?.stop(); } catch(e) {}
   }, []);
 
-  const toggleListening = () => {
+  const toggleListening = useCallback(() => {
     if (isListening) {
       recognitionRef.current?.stop();
       setIsListening(false);
     } else {
+      // Stop any current speech before listening
+      if (ttsAudioRef.current) { try { ttsAudioRef.current.pause(); } catch(e) {} ttsAudioRef.current = null; }
+      if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+      setIsSpeaking(false);
       try {
         recognitionRef.current?.start();
         setIsListening(true);
       } catch {}
     }
-  };
+  }, [isListening]);
+
+  // ── Spacebar & tap-to-listen (hands-free activation) ──
+  // Spacebar toggles mic when NOT typing in the textarea
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      // Only activate on spacebar
+      if (e.code !== "Space") return;
+      // Don't activate when typing in inputs/textareas/contenteditable
+      const tag = e.target?.tagName?.toLowerCase();
+      if (tag === "textarea" || tag === "input" || tag === "select" || e.target?.isContentEditable) return;
+      // Don't activate when modifiers are held
+      if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return;
+      e.preventDefault();
+      toggleListening();
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [toggleListening]);
 
   // Fetch tab content (uses authFetch for auto token refresh)
   useEffect(() => {
@@ -3292,8 +3314,15 @@ export default function App() {
               </div>
             </div>
 
-            {/* Messages */}
-            <div style={{ flex: 1, overflow: "auto", padding: 16, display: "flex", flexDirection: "column", gap: 4 }}>
+            {/* Messages — tap empty space to start voice input */}
+            <div
+              onClick={(e) => {
+                // Only trigger if tapping empty chat area, not on buttons/links/text
+                if (e.target === e.currentTarget && !isListening && !isLoading) {
+                  toggleListening();
+                }
+              }}
+              style={{ flex: 1, overflow: "auto", padding: 16, display: "flex", flexDirection: "column", gap: 4, cursor: "default" }}>
               {messages.map((msg, i) => {
                 const isLastAssistant = msg.role === "assistant" && !messages.slice(i + 1).some(m => m.role === "assistant");
                 return (
@@ -3302,6 +3331,53 @@ export default function App() {
                 </div>
                 );
               })}
+              {/* Tap to Talk hint when chat is empty */}
+              {messages.length === 0 && !isLoading && !isListening && (
+                <div
+                  onClick={toggleListening}
+                  style={{
+                    display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+                    padding: "40px 20px", cursor: "pointer", opacity: 0.6, transition: "opacity 0.3s",
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.opacity = "1"; }}
+                  onMouseLeave={e => { e.currentTarget.style.opacity = "0.6"; }}
+                >
+                  <div style={{ fontSize: 40, marginBottom: 8 }}>🎤</div>
+                  <div style={{ color: colors.textSecondary, fontSize: 13, fontWeight: 600, textAlign: "center" }}>
+                    {language === "fr" ? "Appuyez ici ou sur Espace pour parler" :
+                     language === "es" ? "Toque aquí o presione Espacio para hablar" :
+                     "Tap here or press Spacebar to talk"}
+                  </div>
+                  <div style={{ color: colors.textSecondary, fontSize: 10, marginTop: 4, opacity: 0.7 }}>
+                    {language === "fr" ? "Mains libres — pas besoin de toucher le clavier" :
+                     language === "es" ? "Manos libres — no necesita tocar el teclado" :
+                     "Hands-free — no need to touch the keyboard"}
+                  </div>
+                </div>
+              )}
+              {/* Listening indicator overlay */}
+              {isListening && (
+                <div style={{
+                  display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+                  padding: "20px", animation: "fadeIn 0.3s ease",
+                }}>
+                  <div style={{
+                    width: 80, height: 80, borderRadius: "50%",
+                    background: "rgba(34,197,94,0.15)", border: "3px solid #22c55e",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    fontSize: 36, animation: "pulseGlow 1.5s ease-in-out infinite",
+                    boxShadow: "0 0 30px rgba(34,197,94,0.3)",
+                  }}>🎙️</div>
+                  <div style={{ color: "#22c55e", fontSize: 14, fontWeight: 700, marginTop: 10, letterSpacing: 1 }}>
+                    {language === "fr" ? "J'écoute..." : language === "es" ? "Escuchando..." : "Listening..."}
+                  </div>
+                  <div style={{ color: colors.textSecondary, fontSize: 10, marginTop: 4 }}>
+                    {language === "fr" ? "Appuyez sur Espace pour arrêter" :
+                     language === "es" ? "Presione Espacio para detener" :
+                     "Press Spacebar or tap to stop"}
+                  </div>
+                </div>
+              )}
               {isLoading && (
                 <div style={{ display: "flex", gap: 6, padding: "12px 14px", color: colors.textSecondary, fontSize: 13, alignItems: "center" }}>
                   <div style={{ width: 8, height: 8, borderRadius: "50%", animation: "ping 1s ease infinite", background: colors.accentPrimary }}></div>
@@ -3401,7 +3477,7 @@ export default function App() {
                 </button>
               </div>
               <div style={{ color: colors.textSecondary, fontSize: 10, textAlign: "center", marginTop: 8, letterSpacing: 1, fontWeight: 500 }}>
-                Press Enter to send · Shift+Enter for new line · 🎤 for voice
+                Press Enter to send · Spacebar or 🎤 for voice · Say "yes" or "continue" to hear full answer
               </div>
             </div>
           </aside>
