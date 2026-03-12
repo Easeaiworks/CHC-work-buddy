@@ -1203,13 +1203,7 @@ export default function App() {
     localStorage.setItem("bsai_theme", theme);
   }, [theme]);
 
-  // Preload TTS voices (browsers load them async)
-  useEffect(() => {
-    if ("speechSynthesis" in window) {
-      window.speechSynthesis.getVoices();
-      window.speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices();
-    }
-  }, []);
+  // Note: Browser speechSynthesis removed — all voice output uses OpenAI cloud TTS only
 
   // Speech Recognition setup
   useEffect(() => {
@@ -1231,125 +1225,7 @@ export default function App() {
     recognitionRef.current = recognition;
   }, [language]);
 
-  // TTS — locked-in middle-aged male voice for Max
-  // Pre-load voices on mount and cache the best match per language
-  const voiceCacheRef = useRef({});
-  const voicesLoadedRef = useRef(false);
-
-  // Known high-quality male voices per platform, ordered by preference
-  const PREFERRED_MALE_VOICES = useMemo(() => ({
-    en: [
-      "Microsoft David",    // Windows — natural male
-      "Microsoft Mark",     // Windows — natural male
-      "Daniel",             // macOS/iOS — natural male
-      "Aaron",              // macOS — natural male
-      "Google UK English Male", // Chrome
-      "Google US English",  // Chrome (often male)
-      "Fred",               // macOS fallback
-      "Alex",               // macOS older
-      "David",              // Cross-platform
-      "James",              // Various
-      "Thomas",             // Various
-      "Reed",               // macOS
-      "Evan",               // macOS
-      "Rishi",              // macOS
-      "Gordon",             // macOS
-    ],
-    fr: [
-      "Microsoft Paul",     // Windows French male
-      "Thomas",             // macOS French male
-      "Google français",    // Chrome
-      "Jacques",            // Various
-      "Daniel",             // Fallback
-    ],
-    es: [
-      "Microsoft Pablo",    // Windows Spanish male
-      "Jorge",              // macOS Spanish male
-      "Juan",               // Various
-      "Google español",     // Chrome
-      "Diego",              // Various
-    ],
-  }), []);
-
-  // Load and cache voices — Chrome fires onvoiceschanged async
-  useEffect(() => {
-    if (!("speechSynthesis" in window)) return;
-
-    const findBestVoice = (voices, lang) => {
-      const langPrefix = lang.slice(0, 2);
-      const preferred = PREFERRED_MALE_VOICES[langPrefix] || PREFERRED_MALE_VOICES.en;
-      const naturalTags = ["premium", "enhanced", "natural", "neural"];
-      const langVoices = voices.filter(v => v.lang.startsWith(langPrefix));
-
-      // Pass 1: Exact name match from preferred list (in order of preference)
-      for (const name of preferred) {
-        const match = langVoices.find(v => v.name.toLowerCase().includes(name.toLowerCase()));
-        if (match) return match;
-      }
-
-      // Pass 2: Any natural/premium voice in the language
-      const naturalVoice = langVoices.find(v => naturalTags.some(t => v.name.toLowerCase().includes(t)));
-      if (naturalVoice) return naturalVoice;
-
-      // Pass 3: First non-female voice in the language
-      const femaleNames = ["samantha", "victoria", "karen", "moira", "tessa", "fiona", "kate", "zira", "hazel", "susan", "female", "woman", "girl", "siri"];
-      const nonFemale = langVoices.find(v => !femaleNames.some(f => v.name.toLowerCase().includes(f)));
-      if (nonFemale) return nonFemale;
-
-      // Pass 4: Any voice in the language
-      return langVoices[0] || null;
-    };
-
-    const cacheVoices = () => {
-      const voices = window.speechSynthesis.getVoices();
-      if (!voices.length) return;
-      voicesLoadedRef.current = true;
-      voiceCacheRef.current = {
-        en: findBestVoice(voices, "en-US"),
-        fr: findBestVoice(voices, "fr-CA"),
-        es: findBestVoice(voices, "es-MX"),
-      };
-      // Store the voice names so user doesn't get a different one
-      try {
-        localStorage.setItem("max_voices", JSON.stringify({
-          en: voiceCacheRef.current.en?.name || "",
-          fr: voiceCacheRef.current.fr?.name || "",
-          es: voiceCacheRef.current.es?.name || "",
-        }));
-      } catch {}
-    };
-
-    // Try to restore cached voice names from localStorage
-    const restoreFromStorage = (voices) => {
-      try {
-        const saved = JSON.parse(localStorage.getItem("max_voices") || "{}");
-        let restored = false;
-        for (const lang of ["en", "fr", "es"]) {
-          if (saved[lang]) {
-            const match = voices.find(v => v.name === saved[lang]);
-            if (match) { voiceCacheRef.current[lang] = match; restored = true; }
-          }
-        }
-        return restored;
-      } catch { return false; }
-    };
-
-    // Initial load attempt
-    const voices = window.speechSynthesis.getVoices();
-    if (voices.length) {
-      if (!restoreFromStorage(voices)) cacheVoices();
-      else voicesLoadedRef.current = true;
-    }
-
-    // Chrome fires this event when voices are ready
-    window.speechSynthesis.onvoiceschanged = () => {
-      const v = window.speechSynthesis.getVoices();
-      if (v.length && !voicesLoadedRef.current) {
-        if (!restoreFromStorage(v)) cacheVoices();
-        else voicesLoadedRef.current = true;
-      }
-    };
-  }, [PREFERRED_MALE_VOICES]);
+  // All voice output is handled by OpenAI cloud TTS — no browser voices
 
   // Clean text for natural speech — strip markdown, symbols, URLs, formatting
   const cleanForSpeech = useCallback((text) => {
@@ -1406,46 +1282,17 @@ export default function App() {
   const continueListenerRef = useRef(null);
   const ttsAudioRef = useRef(null);  // Current playing Audio element
 
-  // Core: fetch audio from backend TTS endpoint (cached on server)
-  // Browser TTS fallback — used only when cloud TTS fails
-  const speakBrowserFallback = useCallback((text, { onStart, onEnd, onError } = {}) => {
-    if (!("speechSynthesis" in window)) { onError?.(); return; }
-    window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(text.slice(0, 2000));
-    const langCode = language === "fr" ? "fr-CA" : language === "es" ? "es-MX" : "en-US";
-    utterance.lang = langCode;
-    utterance.rate = 0.92;
-    utterance.pitch = 0.85;
-    // Try to find a decent voice
-    const voices = window.speechSynthesis.getVoices();
-    const langVoices = voices.filter(v => v.lang.startsWith(langCode.slice(0, 2)));
-    if (langVoices.length > 0) utterance.voice = langVoices[0];
-    utterance.onstart = () => onStart?.();
-    utterance.onend = () => onEnd?.();
-    utterance.onerror = () => onError?.();
-    window.speechSynthesis.speak(utterance);
-  }, [language]);
-
-  // Core: fetch audio from backend TTS endpoint (cached on server), fallback to browser voice
+  // ── Cloud TTS only — no browser voice fallback ──
+  // OpenAI TTS is 99.9%+ reliable. If it fails, silence is better than the terrible browser voice.
   const playCloudTTS = useCallback(async (text, { onStart, onEnd, onError } = {}) => {
-    // Guard: once cloud audio starts playing, never fire browser fallback
-    let cloudPlaying = false;
-    let fallbackFired = false;
-
-    const doFallback = () => {
-      if (cloudPlaying || fallbackFired) return; // cloud audio already working, skip fallback
-      fallbackFired = true;
-      console.warn("[TTS] Falling back to browser TTS");
-      speakBrowserFallback(text, { onStart, onEnd, onError });
-    };
-
     try {
-      // Stop any currently playing audio AND any lingering browser speech
+      // Stop any currently playing audio
       if (ttsAudioRef.current) {
         try { ttsAudioRef.current.pause(); } catch(e) {}
         ttsAudioRef.current.src = "";
         ttsAudioRef.current = null;
       }
+      // Kill any lingering browser speech (cleanup from old sessions)
       if ("speechSynthesis" in window) window.speechSynthesis.cancel();
 
       console.log("[TTS] Requesting cloud TTS — lang:", language, "text length:", text.length);
@@ -1459,16 +1306,18 @@ export default function App() {
       if (!res.ok) {
         const errBody = await res.json().catch(() => ({}));
         console.error("[TTS] API error:", res.status, errBody);
-        throw new Error(`TTS failed: ${res.status} — ${errBody.error || "unknown"}`);
+        onError?.();
+        return;
       }
 
       const cacheStatus = res.headers.get("X-TTS-Cache") || "unknown";
       const blob = await res.blob();
-      console.log("[TTS] Received audio blob:", blob.size, "bytes, cache:", cacheStatus, "type:", blob.type);
+      console.log("[TTS] Received audio:", blob.size, "bytes, cache:", cacheStatus);
 
       if (blob.size < 100) {
-        console.error("[TTS] Audio too small:", blob.size, "bytes");
-        throw new Error("TTS returned empty audio");
+        console.error("[TTS] Audio too small:", blob.size, "bytes — skipping playback");
+        onError?.();
+        return;
       }
 
       const url = URL.createObjectURL(blob);
@@ -1477,42 +1326,29 @@ export default function App() {
       ttsAudioRef.current = audio;
 
       audio.onplay = () => {
-        cloudPlaying = true;
-        console.log("[TTS] Cloud audio playing");
-        // Kill any browser TTS that may have started
-        if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+        console.log("[TTS] Playing");
         onStart?.();
       };
       audio.onended = () => {
-        console.log("[TTS] Cloud audio ended");
+        console.log("[TTS] Ended");
         URL.revokeObjectURL(url);
         ttsAudioRef.current = null;
         onEnd?.();
       };
       audio.onerror = (e) => {
-        if (cloudPlaying) return; // already played fine, ignore late errors
-        console.error("[TTS] Audio element error:", e?.target?.error?.message || e);
+        console.error("[TTS] Playback error:", e?.target?.error?.message || e);
         URL.revokeObjectURL(url);
         ttsAudioRef.current = null;
-        doFallback();
+        onError?.();
       };
 
-      // Use play() with catch for autoplay policy
-      try {
-        await audio.play();
-        console.log("[TTS] play() succeeded");
-      } catch (playErr) {
-        console.warn("[TTS] play() blocked (autoplay policy):", playErr.message);
-        URL.revokeObjectURL(url);
-        ttsAudioRef.current = null;
-        doFallback();
-      }
+      await audio.play();
     } catch (err) {
-      console.warn("[TTS] Cloud TTS error:", err.message);
+      console.warn("[TTS] Cloud TTS unavailable:", err.message);
       ttsAudioRef.current = null;
-      doFallback();
+      onError?.();
     }
-  }, [language, speakBrowserFallback]);
+  }, [language]);
 
   // Start a brief voice listener for "continue" / "yes" / "read it" commands
   const startContinueListener = useCallback((fullText) => {
