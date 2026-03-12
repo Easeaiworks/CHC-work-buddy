@@ -1576,9 +1576,11 @@ export default function App() {
   };
 
   // Send message to AI agent
+  const sendingRef = useRef(false);  // Ref-based guard — React state batching can't defeat this
   const handleSendMessage = async (overrideText) => {
     const text = (overrideText || inputValue).trim();
-    if (!text || isLoading) return;
+    if (!text || isLoading || sendingRef.current) return;
+    sendingRef.current = true;  // Lock immediately — synchronous, no batching delay
 
     const userMessage = { role: "user", content: text, sources: [] };
     setMessages(prev => [...prev, userMessage]);
@@ -1656,6 +1658,7 @@ export default function App() {
       });
     }
     setIsLoading(false);
+    sendingRef.current = false;  // Release the send lock
   };
 
   // Auth
