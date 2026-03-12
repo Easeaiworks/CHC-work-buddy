@@ -2,6 +2,7 @@
 -- PPG SU470LV / SUA470LV is the current 1K Compliant Adhesion Promoter
 -- Replaces the older SU4902 Plastic Adhesion Prep
 -- Source: PPG Technical Data Sheet OC-35
+-- Run in Supabase SQL Editor
 
 -- ═══════════════════════════════════════════════════════════
 -- 1. Update Quiz Question (Plastic & Substrate Prep — Q2)
@@ -28,103 +29,25 @@ INSERT INTO public.quiz_answers (question_id, answer_order, answer_text_en, answ
 -- 2. Add SU470LV Technical Data Document to Knowledge Base
 -- ═══════════════════════════════════════════════════════════
 
-INSERT INTO public.documents (
-  id, title, content, category, subcategory, language, metadata
-) VALUES (
-  gen_random_uuid(),
+INSERT INTO public.documents (title, description, doc_type, tab_slug, tags, metadata) VALUES (
   'PPG SU470LV / SUA470LV — OneChoice 1K Compliant Adhesion Promoter (TDS OC-35)',
-  E'# PPG OneChoice SU470LV / SUA470LV — 1K Compliant Adhesion Promoter\n\n' ||
-  E'## Product Description\n' ||
-  E'SU470LV (National Rule) and SUA470LV (SCAQMD Compliant) are single-component (1K) adhesion promoters for use on properly prepared OEM and aftermarket plastic parts including TPO, PP, EPDM, Noryl, ABS, SMC, and fiberglass. Replaces the older two-component SU4902 system.\n\n' ||
-  E'## Key Advantages\n' ||
-  E'- Ready to spray — no mixing, reducing, or catalyst required\n' ||
-  E'- Indefinite pot life (single component)\n' ||
-  E'- 1K formula reduces waste and simplifies inventory\n' ||
-  E'- VOC Compliant: SU470LV ≤4.4 lbs/gal, SUA470LV ≤2.1 lbs/gal\n\n' ||
-  E'## Surface Preparation\n' ||
-  E'1. Clean surface with SWX350, SX103/SXA103, or SX394\n' ||
-  E'2. Scuff with SU4901 Clean & Scuff Pad or SX1002 Sanding Paste\n' ||
-  E'3. Re-clean with SWX350 or SX103/SXA103\n' ||
-  E'4. Blow off with filtered compressed air or tack cloth\n\n' ||
-  E'## Application\n' ||
-  E'- Apply 1 medium wet coat\n' ||
-  E'- Spray gun setup: Fluid tip 1.3–1.5 mm\n' ||
-  E'- HVLP pressure: 8–10 PSI at the cap\n' ||
-  E'- Compliant gun pressure: 29–40 PSI\n' ||
-  E'- Coverage: approx. 700 sq ft per gallon\n\n' ||
-  E'## Dry Time\n' ||
-  E'- 10 minutes at 70°F (21°C) before applying topcoat\n' ||
-  E'- If more than 1 hour has passed, lightly sand, re-clean, and reapply\n\n' ||
-  E'## Critical Notes\n' ||
-  E'- Do NOT directly topcoat with Envirobase HP or Aquabase Plus waterborne basecoats — a sealer coat is required first\n' ||
-  E'- Compatible topcoat systems: Deltron 2000, Envirobase HP (with sealer), Global Refinish System, Aquabase Plus (with sealer), Concept, Nexa Autocolor\n' ||
-  E'- Store at 60–80°F (16–27°C). Do not freeze.\n' ||
-  E'- Shelf life: refer to product label for expiration date\n\n' ||
-  E'## Packaging\n' ||
-  E'- SU470LV: Quart, Gallon\n' ||
-  E'- SUA470LV: Quart, Gallon',
-  'products',
-  'adhesion-promoter',
-  'en',
-  '{"source": "PPG TDS OC-35", "product_code": "SU470LV", "replaces": "SU4902", "type": "technical-data-sheet", "manufacturer": "PPG Industries"}'::jsonb
-),
-(
-  gen_random_uuid(),
-  'PPG SU470LV / SUA470LV — Promoteur d''adhérence 1K conforme OneChoice (TDS OC-35)',
-  E'# PPG OneChoice SU470LV / SUA470LV — Promoteur d''adhérence 1K conforme\n\n' ||
-  E'## Description du produit\n' ||
-  E'SU470LV (règle nationale) et SUA470LV (conforme SCAQMD) sont des promoteurs d''adhérence monocomposants (1K) pour les pièces plastiques OEM et de rechange correctement préparées, incluant TPO, PP, EPDM, Noryl, ABS, SMC et fibre de verre. Remplace l''ancien système bicomposant SU4902.\n\n' ||
-  E'## Avantages clés\n' ||
-  E'- Prêt à pulvériser — aucun mélange, réduction ou catalyseur requis\n' ||
-  E'- Durée de vie en pot indéfinie (monocomposant)\n' ||
-  E'- Formule 1K réduit les déchets et simplifie l''inventaire\n\n' ||
-  E'## Préparation de surface\n' ||
-  E'1. Nettoyer avec SWX350, SX103/SXA103 ou SX394\n' ||
-  E'2. Frotter avec SU4901 Clean & Scuff Pad ou SX1002\n' ||
-  E'3. Re-nettoyer avec SWX350 ou SX103/SXA103\n' ||
-  E'4. Souffler avec air comprimé filtré\n\n' ||
-  E'## Application\n' ||
-  E'- Appliquer 1 couche humide moyenne\n' ||
-  E'- Buse: 1,3–1,5 mm\n' ||
-  E'- HVLP: 8–10 PSI au chapeau d''air\n\n' ||
-  E'## Temps de séchage\n' ||
-  E'- 10 minutes à 70°F (21°C) avant d''appliquer la couche suivante\n' ||
-  E'- Si plus d''une heure, poncer légèrement, re-nettoyer et réappliquer\n\n' ||
-  E'## Notes importantes\n' ||
-  E'- Ne PAS appliquer directement Envirobase HP ou Aquabase Plus — un scellant est requis\n' ||
-  E'- Systèmes compatibles: Deltron 2000, Envirobase HP (avec scellant), GRS, Aquabase Plus (avec scellant), Concept, Nexa Autocolor',
-  'products',
-  'adhesion-promoter',
-  'fr',
-  '{"source": "PPG TDS OC-35", "product_code": "SU470LV", "replaces": "SU4902", "type": "technical-data-sheet", "manufacturer": "PPG Industries"}'::jsonb
-),
-(
-  gen_random_uuid(),
-  'PPG SU470LV / SUA470LV — Promotor de adhesión 1K OneChoice (TDS OC-35)',
-  E'# PPG OneChoice SU470LV / SUA470LV — Promotor de adhesión 1K conforme\n\n' ||
-  E'## Descripción del producto\n' ||
-  E'SU470LV (regla nacional) y SUA470LV (conforme SCAQMD) son promotores de adhesión monocomponentes (1K) para piezas plásticas OEM y de repuesto correctamente preparadas, incluyendo TPO, PP, EPDM, Noryl, ABS, SMC y fibra de vidrio. Reemplaza el antiguo sistema bicomponente SU4902.\n\n' ||
-  E'## Ventajas clave\n' ||
-  E'- Listo para rociar — no requiere mezcla, reducción ni catalizador\n' ||
-  E'- Vida útil en el bote indefinida (monocomponente)\n' ||
-  E'- Fórmula 1K reduce desperdicio y simplifica inventario\n\n' ||
-  E'## Preparación de superficie\n' ||
-  E'1. Limpiar con SWX350, SX103/SXA103 o SX394\n' ||
-  E'2. Frotar con SU4901 Clean & Scuff Pad o SX1002\n' ||
-  E'3. Re-limpiar con SWX350 o SX103/SXA103\n' ||
-  E'4. Soplar con aire comprimido filtrado\n\n' ||
-  E'## Aplicación\n' ||
-  E'- Aplicar 1 capa húmeda media\n' ||
-  E'- Boquilla: 1,3–1,5 mm\n' ||
-  E'- HVLP: 8–10 PSI en la tapa de aire\n\n' ||
-  E'## Tiempo de secado\n' ||
-  E'- 10 minutos a 70°F (21°C) antes de aplicar la capa siguiente\n' ||
-  E'- Si pasa más de 1 hora, lijar ligeramente, limpiar y volver a aplicar\n\n' ||
-  E'## Notas importantes\n' ||
-  E'- NO aplicar directamente Envirobase HP o Aquabase Plus — se requiere sellador\n' ||
-  E'- Sistemas compatibles: Deltron 2000, Envirobase HP (con sellador), GRS, Aquabase Plus (con sellador), Concept, Nexa Autocolor',
-  'products',
-  'adhesion-promoter',
-  'es',
-  '{"source": "PPG TDS OC-35", "product_code": "SU470LV", "replaces": "SU4902", "type": "technical-data-sheet", "manufacturer": "PPG Industries"}'::jsonb
+  'PPG OneChoice SU470LV (National Rule) and SUA470LV (SCAQMD Compliant) single-component 1K adhesion promoter for TPO, PP, EPDM, Noryl, ABS, SMC, fiberglass. Ready to spray, no mixing. Replaces older SU4902. 10 min dry time at 70°F. Source: PPG TDS OC-35.',
+  'tech_sheet',
+  'painting',
+  ARRAY['ppg', 'SU470LV', 'SUA470LV', 'adhesion promoter', '1K', 'plastic prep', 'TPO', 'PP', 'EPDM', 'ABS', 'SMC', 'fiberglass', 'SU4902', 'OneChoice', 'OC-35'],
+  '{"full_content": "PPG OneChoice SU470LV / SUA470LV — 1K Compliant Adhesion Promoter\n\nProduct Description:\nSU470LV (National Rule) and SUA470LV (SCAQMD Compliant) are single-component (1K) adhesion promoters for use on properly prepared OEM and aftermarket plastic parts including TPO, PP, EPDM, Noryl, ABS, SMC, and fiberglass. Replaces the older two-component SU4902 system.\n\nKey Advantages:\n• Ready to spray — no mixing, reducing, or catalyst required\n• Indefinite pot life (single component)\n• 1K formula reduces waste and simplifies inventory\n• VOC Compliant: SU470LV ≤4.4 lbs/gal, SUA470LV ≤2.1 lbs/gal\n\nSurface Preparation:\n1. Clean surface with SWX350, SX103/SXA103, or SX394\n2. Scuff with SU4901 Clean & Scuff Pad or SX1002 Sanding Paste\n3. Re-clean with SWX350 or SX103/SXA103\n4. Blow off with filtered compressed air or tack cloth\n\nApplication:\n• Apply 1 medium wet coat\n• Spray gun setup: Fluid tip 1.3–1.5 mm\n• HVLP pressure: 8–10 PSI at the cap\n• Compliant gun pressure: 29–40 PSI\n• Coverage: approx. 700 sq ft per gallon\n\nDry Time:\n• 10 minutes at 70°F (21°C) before applying topcoat\n• If more than 1 hour has passed, lightly sand, re-clean, and reapply\n\nCritical Notes:\n• Do NOT directly topcoat with Envirobase HP or Aquabase Plus waterborne basecoats — a sealer coat is required first\n• Compatible topcoat systems: Deltron 2000, Envirobase HP (with sealer), Global Refinish System, Aquabase Plus (with sealer), Concept, Nexa Autocolor\n• Store at 60–80°F (16–27°C). Do not freeze.\n\nPackaging: SU470LV and SUA470LV available in Quart and Gallon\n\nSource: PPG Industries — TDS OC-35", "source": "PPG TDS OC-35", "product_code": "SU470LV", "replaces": "SU4902", "type": "tech_sheet", "manufacturer": "PPG Industries"}'::jsonb
 );
+
+-- Chunk 1: Product overview, advantages, and surface prep
+INSERT INTO public.document_chunks (document_id, chunk_index, content, metadata)
+SELECT id, 0,
+  'PPG OneChoice SU470LV SUA470LV 1K Compliant Adhesion Promoter. Single-component 1K adhesion promoter for OEM and aftermarket plastic parts: TPO PP EPDM Noryl ABS SMC fiberglass. Replaces older two-component SU4902 system. Ready to spray no mixing reducing or catalyst required. Indefinite pot life. VOC compliant SU470LV 4.4 lbs/gal SUA470LV 2.1 lbs/gal. Surface prep: clean with SWX350 SX103 SXA103 or SX394, scuff with SU4901 Clean and Scuff Pad or SX1002 Sanding Paste, re-clean, blow off with filtered compressed air or tack cloth.',
+  '{"source": "PPG TDS OC-35", "type": "tech_sheet", "category": "adhesion-promoter", "product_code": "SU470LV"}'::jsonb
+FROM public.documents WHERE title = 'PPG SU470LV / SUA470LV — OneChoice 1K Compliant Adhesion Promoter (TDS OC-35)';
+
+-- Chunk 2: Application, dry time, and critical compatibility notes
+INSERT INTO public.document_chunks (document_id, chunk_index, content, metadata)
+SELECT id, 1,
+  'SU470LV application: Apply 1 medium wet coat. Fluid tip 1.3-1.5 mm. HVLP 8-10 PSI at cap. Compliant gun 29-40 PSI. Coverage approx 700 sq ft per gallon. Dry time 10 minutes at 70°F 21°C before top coating. If more than 1 hour has passed lightly sand re-clean and reapply. CRITICAL: Do NOT directly topcoat with Envirobase HP or Aquabase Plus waterborne basecoats — must apply sealer coat first. Compatible systems: Deltron 2000, Envirobase HP with sealer, Global Refinish System, Aquabase Plus with sealer, Concept, Nexa Autocolor. Store 60-80°F 16-27°C do not freeze. Available in quart and gallon.',
+  '{"source": "PPG TDS OC-35", "type": "tech_sheet", "category": "application", "product_code": "SU470LV"}'::jsonb
+FROM public.documents WHERE title = 'PPG SU470LV / SUA470LV — OneChoice 1K Compliant Adhesion Promoter (TDS OC-35)';
