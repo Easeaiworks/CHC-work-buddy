@@ -350,20 +350,25 @@ function VoiceButton({ isListening, onToggle, disabled, theme = "dark" }) {
       onClick={onToggle}
       disabled={disabled}
       style={{
-        width: 52, height: 52,
+        width: 64, height: 64,
         borderRadius: "50%",
-        border: `2px solid ${isListening ? "#22c55e" : colors.borderLight}`,
-        background: isListening ? "rgba(34,197,94,0.15)" : colors.surfaceLight,
+        border: `3px solid ${isListening ? "#22c55e" : colors.borderLight}`,
+        background: isListening
+          ? "linear-gradient(135deg, rgba(34,197,94,0.25), rgba(34,197,94,0.1))"
+          : `linear-gradient(135deg, ${colors.surfaceLight}, ${colors.surface})`,
         color: isListening ? "#22c55e" : colors.textSecondary,
-        fontSize: 20,
+        fontSize: 28,
         cursor: disabled ? "not-allowed" : "pointer",
         display: "flex", alignItems: "center", justifyContent: "center",
         transition: "all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)",
         flexShrink: 0,
-        boxShadow: isListening ? "0 0 15px rgba(34,197,94,0.3)" : "0 4px 12px rgba(0,0,0,0.1)",
+        boxShadow: isListening
+          ? "0 0 20px rgba(34,197,94,0.4), 0 0 40px rgba(34,197,94,0.15)"
+          : "0 4px 16px rgba(0,0,0,0.15)",
         transform: "scale(1)",
+        animation: isListening ? "pulseGlow 1.5s ease-in-out infinite" : "none",
       }}
-      onMouseEnter={(e) => { e.target.style.transform = "scale(1.05)"; }}
+      onMouseEnter={(e) => { e.target.style.transform = "scale(1.08)"; }}
       onMouseLeave={(e) => { e.target.style.transform = "scale(1)"; }}
       title={isListening ? "Stop listening" : "Start voice input"}
     >
@@ -1426,10 +1431,12 @@ export default function App() {
     try {
       // Stop any currently playing audio
       if (ttsAudioRef.current) {
-        ttsAudioRef.current.pause();
+        try { ttsAudioRef.current.pause(); } catch(e) {}
         ttsAudioRef.current.src = "";
         ttsAudioRef.current = null;
       }
+
+      console.log("[TTS] Requesting cloud TTS — lang:", language, "text length:", text.length);
 
       const res = await authFetch(`${API_BASE}/api/tts`, {
         method: "POST",
@@ -1439,40 +1446,56 @@ export default function App() {
 
       if (!res.ok) {
         const errBody = await res.json().catch(() => ({}));
-        console.error("TTS API error:", res.status, errBody);
+        console.error("[TTS] API error:", res.status, errBody);
         throw new Error(`TTS failed: ${res.status} — ${errBody.error || "unknown"}`);
       }
 
+      const cacheStatus = res.headers.get("X-TTS-Cache") || "unknown";
       const blob = await res.blob();
+      console.log("[TTS] Received audio blob:", blob.size, "bytes, cache:", cacheStatus, "type:", blob.type);
+
       if (blob.size < 100) {
-        console.error("TTS returned suspiciously small audio:", blob.size, "bytes");
+        console.error("[TTS] Audio too small:", blob.size, "bytes");
         throw new Error("TTS returned empty audio");
       }
 
       const url = URL.createObjectURL(blob);
       const audio = new Audio(url);
+      audio.volume = 1.0;
       ttsAudioRef.current = audio;
 
-      audio.onplay = () => { onStart?.(); };
+      audio.onplay = () => {
+        console.log("[TTS] Audio playing");
+        onStart?.();
+      };
       audio.onended = () => {
+        console.log("[TTS] Audio ended");
         URL.revokeObjectURL(url);
         ttsAudioRef.current = null;
         onEnd?.();
       };
       audio.onerror = (e) => {
-        console.error("Audio playback error:", e);
+        console.error("[TTS] Audio playback error:", e?.target?.error?.message || e);
         URL.revokeObjectURL(url);
         ttsAudioRef.current = null;
-        // Fallback to browser TTS
-        console.warn("Falling back to browser TTS");
+        console.warn("[TTS] Falling back to browser TTS");
         speakBrowserFallback(text, { onStart, onEnd, onError });
       };
 
-      await audio.play();
+      // Use play() with catch for autoplay policy
+      try {
+        await audio.play();
+        console.log("[TTS] play() succeeded");
+      } catch (playErr) {
+        console.warn("[TTS] play() blocked (autoplay policy):", playErr.message);
+        // Autoplay was blocked — fall back to browser TTS which is often allowed after user gesture
+        URL.revokeObjectURL(url);
+        ttsAudioRef.current = null;
+        speakBrowserFallback(text, { onStart, onEnd, onError });
+      }
     } catch (err) {
-      console.warn("Cloud TTS error, falling back to browser voice:", err.message);
+      console.warn("[TTS] Cloud TTS error, falling back to browser voice:", err.message);
       ttsAudioRef.current = null;
-      // Fallback to browser TTS so user always hears something
       speakBrowserFallback(text, { onStart, onEnd, onError });
     }
   }, [language, speakBrowserFallback]);
@@ -2338,7 +2361,7 @@ export default function App() {
         <main style={{
           flex: 1,
           overflow: "auto",
-          padding: 20,
+          padding: "20px 20px 60px 20px",
           display: "flex",
           flexDirection: "column",
           gap: 16,
@@ -3377,9 +3400,11 @@ export default function App() {
       {/* Media Viewer Modal */}
       {mediaViewer && <MediaViewer item={mediaViewer} onClose={() => setMediaViewer(null)} theme={theme} />}
 
-      {/* Resources & Attribution Footer Bar */}
+      {/* Resources & Attribution Footer Bar — does NOT overlap chat sidebar */}
       <div id="resources-footer-bar" style={{
-        position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 9999,
+        position: "fixed", bottom: 0, left: 0,
+        right: sidebarOpen ? 400 : 0,
+        zIndex: 999,
         background: colors.background,
         borderTop: `2px solid ${colors.accentPrimary}`,
         boxShadow: `0 -4px 24px rgba(0,0,0,0.6)`,

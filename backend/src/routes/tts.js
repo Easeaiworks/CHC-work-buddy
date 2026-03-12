@@ -40,15 +40,25 @@ const TTS_RESPONSE_FORMAT = 'mp3';
 const MAX_TTS_CHARS = 3000;        // Hard cap to control cost
 const CACHE_BUCKET = 'tts-cache';  // Supabase Storage bucket name
 
-// Voice instruction — steer gpt-4o-mini-tts to sound like Max
-const VOICE_INSTRUCTIONS = 'Speak as a confident, knowledgeable middle-aged North American male. ' +
+// Voice instructions — steer gpt-4o-mini-tts to sound like Max (per language)
+const VOICE_INSTRUCTIONS_BASE = 'Speak as a confident, knowledgeable middle-aged North American male. ' +
   'Use a calm, professional, and clear tone — like a seasoned automotive industry expert explaining something to a colleague. ' +
   'Moderate pace, natural pauses between sentences. Do not sound robotic or overly enthusiastic.';
 
+const VOICE_INSTRUCTIONS_MAP = {
+  en: VOICE_INSTRUCTIONS_BASE,
+  fr: VOICE_INSTRUCTIONS_BASE + ' Speak entirely in French with a natural Canadian French accent.',
+  es: VOICE_INSTRUCTIONS_BASE + ' Speak entirely in Spanish with a clear, neutral Latin American accent.',
+};
+
+// Keep single default for cache key backwards compatibility
+const VOICE_INSTRUCTIONS = VOICE_INSTRUCTIONS_BASE;
+
 // Generate a deterministic cache key from text + voice config + instructions
 function cacheKey(text, voice, lang) {
+  const instructions = VOICE_INSTRUCTIONS_MAP[lang] || VOICE_INSTRUCTIONS_BASE;
   const hash = crypto.createHash('sha256')
-    .update(`v2:${voice}:${lang}:${VOICE_INSTRUCTIONS}:${text}`)
+    .update(`v3:${voice}:${lang}:${instructions}:${text}`)
     .digest('hex')
     .slice(0, 24);
   return `${lang}/${hash}.mp3`;
@@ -75,6 +85,8 @@ ttsRouter.post('/', async (req, res) => {
       return res.status(400).json({ error: 'text is empty after cleaning' });
     }
 
+    // Pick language-specific voice instructions
+    const voiceInstructions = VOICE_INSTRUCTIONS_MAP[language] || VOICE_INSTRUCTIONS_BASE;
     const key = cacheKey(cleanText, TTS_VOICE, language);
 
     // ── 1. Check Supabase Storage cache ──
@@ -106,7 +118,7 @@ ttsRouter.post('/', async (req, res) => {
       model: TTS_MODEL,
       voice: TTS_VOICE,
       input: cleanText,
-      instructions: VOICE_INSTRUCTIONS,
+      instructions: voiceInstructions,
       response_format: TTS_RESPONSE_FORMAT,
       speed: 1.0,
     });
