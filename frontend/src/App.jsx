@@ -1281,51 +1281,57 @@ export default function App() {
   const pendingFullTextRef = useRef(null);
   const continueListenerRef = useRef(null);
   const ttsAudioRef = useRef(null);  // Current playing Audio element
-  const ttsLockRef = useRef(false);  // Prevent concurrent TTS calls
+  const ttsGenRef = useRef(0);       // Generation counter — cancels stale TTS calls
 
   // ── Cloud TTS only — no browser voice fallback ──
-  // OpenAI TTS is 99.9%+ reliable. If it fails, silence is better than the terrible browser voice.
+  // Uses generation counter: each new call increments the counter. If a stale
+  // call finishes fetching after a newer call started, it detects the mismatch
+  // and silently aborts. This prevents double-fire, overlapping audio, etc.
   const playCloudTTS = useCallback(async (text, { onStart, onEnd, onError } = {}) => {
-    // Prevent double-fire — if already fetching/playing TTS, skip
-    if (ttsLockRef.current) {
-      console.log("[TTS] Skipping — already in progress");
-      return;
+    // Stop any currently playing audio
+    if (ttsAudioRef.current) {
+      try { ttsAudioRef.current.pause(); } catch(e) {}
+      ttsAudioRef.current.src = "";
+      ttsAudioRef.current = null;
     }
-    ttsLockRef.current = true;
+    if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+
+    // Increment generation — any in-flight requests from older generations will be discarded
+    const thisGen = ++ttsGenRef.current;
+    console.log("[TTS] Gen", thisGen, "— Requesting cloud TTS, lang:", language, "text length:", text.length);
 
     try {
-      // Stop any currently playing audio
-      if (ttsAudioRef.current) {
-        try { ttsAudioRef.current.pause(); } catch(e) {}
-        ttsAudioRef.current.src = "";
-        ttsAudioRef.current = null;
-      }
-      // Kill any lingering browser speech (cleanup from old sessions)
-      if ("speechSynthesis" in window) window.speechSynthesis.cancel();
-
-      console.log("[TTS] Requesting cloud TTS — lang:", language, "text length:", text.length);
-
       const res = await authFetch(`${API_BASE}/api/tts`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text, language }),
       });
 
+      // Stale check — a newer speak() call happened while we were fetching
+      if (thisGen !== ttsGenRef.current) {
+        console.log("[TTS] Gen", thisGen, "— Stale, discarding (current gen:", ttsGenRef.current + ")");
+        return;
+      }
+
       if (!res.ok) {
-        const errBody = await res.json().catch(() => ({}));
-        console.error("[TTS] API error:", res.status, errBody);
-        ttsLockRef.current = false;
+        console.error("[TTS] API error:", res.status);
         onError?.();
         return;
       }
 
       const cacheStatus = res.headers.get("X-TTS-Cache") || "unknown";
       const blob = await res.blob();
-      console.log("[TTS] Received audio:", blob.size, "bytes, cache:", cacheStatus);
+
+      // Stale check again after blob download
+      if (thisGen !== ttsGenRef.current) {
+        console.log("[TTS] Gen", thisGen, "— Stale after download, discarding");
+        return;
+      }
+
+      console.log("[TTS] Gen", thisGen, "— Received audio:", blob.size, "bytes, cache:", cacheStatus);
 
       if (blob.size < 100) {
-        console.error("[TTS] Audio too small:", blob.size, "bytes — skipping playback");
-        ttsLockRef.current = false;
+        console.error("[TTS] Audio too small:", blob.size, "bytes — skipping");
         onError?.();
         return;
       }
@@ -1336,30 +1342,29 @@ export default function App() {
       ttsAudioRef.current = audio;
 
       audio.onplay = () => {
-        console.log("[TTS] Playing audio (" + blob.size + " bytes)");
+        console.log("[TTS] Gen", thisGen, "— Playing audio (" + blob.size + " bytes)");
         onStart?.();
       };
       audio.onended = () => {
-        console.log("[TTS] Ended");
+        console.log("[TTS] Gen", thisGen, "— Ended");
         URL.revokeObjectURL(url);
-        ttsAudioRef.current = null;
-        ttsLockRef.current = false;
+        if (ttsAudioRef.current === audio) ttsAudioRef.current = null;
         onEnd?.();
       };
       audio.onerror = (e) => {
-        console.error("[TTS] Playback error:", e?.target?.error?.message || e);
+        console.error("[TTS] Gen", thisGen, "— Playback error:", e?.target?.error?.message || e);
         URL.revokeObjectURL(url);
-        ttsAudioRef.current = null;
-        ttsLockRef.current = false;
+        if (ttsAudioRef.current === audio) ttsAudioRef.current = null;
         onError?.();
       };
 
       await audio.play();
     } catch (err) {
-      console.warn("[TTS] Cloud TTS unavailable:", err.message);
-      ttsAudioRef.current = null;
-      ttsLockRef.current = false;
-      onError?.();
+      if (thisGen === ttsGenRef.current) {
+        console.warn("[TTS] Gen", thisGen, "— Cloud TTS unavailable:", err.message);
+        ttsAudioRef.current = null;
+        onError?.();
+      }
     }
   }, [language]);
 
@@ -1423,14 +1428,13 @@ export default function App() {
   }, [language, playCloudTTS]);
 
   const speak = useCallback(async (text, { fullRead = false } = {}) => {
-    // Stop any current audio and release lock
+    // Stop any current audio (generation counter in playCloudTTS handles the rest)
     if (ttsAudioRef.current) {
       ttsAudioRef.current.pause();
       ttsAudioRef.current.src = "";
       ttsAudioRef.current = null;
     }
     if ("speechSynthesis" in window) window.speechSynthesis.cancel();
-    ttsLockRef.current = false;  // Reset lock so new speak() call can proceed
     setAwaitingContinue(false);
     pendingFullTextRef.current = null;
 
@@ -1477,7 +1481,6 @@ export default function App() {
     }
     // Also cancel any browser TTS (legacy cleanup)
     if ("speechSynthesis" in window) window.speechSynthesis.cancel();
-    ttsLockRef.current = false;  // Release the lock
     setIsSpeaking(false);
     setAwaitingContinue(false);
     pendingFullTextRef.current = null;
