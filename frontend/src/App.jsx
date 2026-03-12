@@ -249,8 +249,8 @@ function MaxAvatar({ isSpeaking, isListening, language, onLanguageChange, theme 
           <ellipse cx="76" cy="35" rx="3" ry="2" fill="white" opacity="0.4" />
 
           {/* Eyes - softer, rounder appearance */}
-          <ellipse cx="48" cy="52" rx="8.5" ry={eyeBlink ? 1 : 6.5} fill="white" rx="8.5" />
-          <ellipse cx="72" cy="52" rx="8.5" ry={eyeBlink ? 1 : 6.5} fill="white" rx="8.5" />
+          <ellipse cx="48" cy="52" rx="8.5" ry={eyeBlink ? 1 : 6.5} fill="white" />
+          <ellipse cx="72" cy="52" rx="8.5" ry={eyeBlink ? 1 : 6.5} fill="white" />
           {/* Slight white highlight for glossy effect */}
           <circle cx="48" cy="50" r="3.5" fill="rgba(255,255,255,0.3)" opacity="0.5" />
           <circle cx="72" cy="50" r="3.5" fill="rgba(255,255,255,0.3)" opacity="0.5" />
