@@ -1127,9 +1127,6 @@ function MediaViewer({ item, onClose, theme = "dark" }) {
   );
 }
 
-// ─── Module-level TTS guard (shared across all component instances) ──
-let _ttsGeneration = 0;       // Generation counter for async TTS cancellation
-
 // ─── Main App ─────────────────────────────────────────────────
 export default function App() {
   const [activeTab, setActiveTab] = useState("vehicle-disassembly");
@@ -1287,10 +1284,10 @@ export default function App() {
   const pendingFullTextRef = useRef(null);
   const continueListenerRef = useRef(null);
   const ttsAudioRef = useRef(null);  // Current playing Audio element
-  // ttsGenRef replaced by module-level _ttsGeneration
+  const ttsGenRef = useRef(0);       // Generation counter — cancels stale TTS calls
 
   // ── Cloud TTS only — no browser voice fallback ──
-  // Uses module-level generation counter: each new call increments _ttsGeneration.
+  // Uses generation counter: each new call increments ttsGenRef.current.
   // If a stale call finishes after a newer call started, it detects the mismatch
   // and silently aborts. Module-level ensures it works even if component double-mounts.
   const playCloudTTS = useCallback(async (text, { onStart, onEnd, onError } = {}) => {
@@ -1303,7 +1300,7 @@ export default function App() {
     if ("speechSynthesis" in window) window.speechSynthesis.cancel();
 
     // Increment module-level generation — stale requests from any instance will be discarded
-    const thisGen = ++_ttsGeneration;
+    const thisGen = ++ttsGenRef.current;
     console.log("[TTS] Gen", thisGen, "— Requesting cloud TTS, lang:", language, "text length:", text.length);
 
     try {
@@ -1314,8 +1311,8 @@ export default function App() {
       });
 
       // Stale check — a newer speak() call happened while we were fetching
-      if (thisGen !== _ttsGeneration) {
-        console.log("[TTS] Gen", thisGen, "— Stale, discarding (current gen:", _ttsGeneration + ")");
+      if (thisGen !== ttsGenRef.current) {
+        console.log("[TTS] Gen", thisGen, "— Stale, discarding (current gen:", ttsGenRef.current + ")");
         return;
       }
 
@@ -1329,7 +1326,7 @@ export default function App() {
       const blob = await res.blob();
 
       // Stale check again after blob download
-      if (thisGen !== _ttsGeneration) {
+      if (thisGen !== ttsGenRef.current) {
         console.log("[TTS] Gen", thisGen, "— Stale after download, discarding");
         return;
       }
@@ -1366,7 +1363,7 @@ export default function App() {
 
       await audio.play();
     } catch (err) {
-      if (thisGen === _ttsGeneration) {
+      if (thisGen === ttsGenRef.current) {
         console.warn("[TTS] Gen", thisGen, "— Cloud TTS unavailable:", err.message);
         ttsAudioRef.current = null;
         onError?.();

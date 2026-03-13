@@ -1,3 +1,4 @@
+import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import App from "./App.jsx";
 import AdminPanel from "./AdminPanel.jsx";
@@ -6,5 +7,7 @@ import AdminPanel from "./AdminPanel.jsx";
 const path = window.location.pathname;
 
 createRoot(document.getElementById("root")).render(
-  path.startsWith("/admin") ? <AdminPanel /> : <App />
+  <StrictMode>
+    {path.startsWith("/admin") ? <AdminPanel /> : <App />}
+  </StrictMode>
 );
